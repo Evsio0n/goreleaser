@@ -40,6 +40,7 @@ builds:
       - arm64
       - ppc64
       - riscv64
+      - loong64
     goarm:
       - "7"
     ignore:
