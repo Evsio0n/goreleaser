@@ -1,3 +1,4 @@
+// Package teams announces new releases to Microsoft Teams.
 package teams
 
 import (
@@ -20,8 +21,11 @@ const (
 
 type Pipe struct{}
 
-func (Pipe) String() string                 { return "teams" }
-func (Pipe) Skip(ctx *context.Context) bool { return !ctx.Config.Announce.Teams.Enabled }
+func (Pipe) String() string { return "teams" }
+func (Pipe) Skip(ctx *context.Context) (bool, error) {
+	enable, err := tmpl.New(ctx).Bool(ctx.Config.Announce.Teams.Enabled)
+	return !enable, err
+}
 
 type Config struct {
 	Webhook string `env:"TEAMS_WEBHOOK,notEmpty"`

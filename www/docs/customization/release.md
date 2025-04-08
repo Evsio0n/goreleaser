@@ -39,7 +39,7 @@ release:
   # Whether to use an existing draft release as the target release.
   #
   # Available only for GitHub.
-  # Since: v2.5.
+  # <!-- md:inline_version v2.5 -->.
   use_existing_draft: true
 
   # Whether to remove an artifact that already exists.
@@ -68,6 +68,9 @@ release:
   # publish a binary from a monorepo into a public repository somewhere, without
   # the tag prefix.
   #
+  # Note: if you change this, you might want to change 'url_template' in the
+  # subsequent publishers and announcers.
+  #
   # This feature is only available in GoReleaser Pro.
   # Default: '{{ .PrefixedCurrentTag }}'.
   # Templates: allowed.
@@ -94,6 +97,7 @@ release:
   # Available only for GitHub.
   #
   # Default: true.
+  # Templates: allowed. (Since v2.6)
   make_latest: true
 
   # What to do with the release notes in case there the release already exists.
@@ -346,16 +350,6 @@ ALLOWED_TYPES = application/gzip|application/x-gzip|application/x-gtar|applicati
 !!! warning
 
     `draft` and `prerelease` are only supported by GitHub and Gitea.
-
-### Define Previous Tag
-
-GoReleaser uses `git describe` to get the previous tag used for generating the
-Changelog. You can set a different build tag using the environment variable
-`GORELEASER_PREVIOUS_TAG`. This is useful in scenarios where two tags point to
-the same commit.
-
-The [Nightly](nightlies.md) is automatically ignored, even if set
-via the environment variables above.
 
 ## Custom release notes
 

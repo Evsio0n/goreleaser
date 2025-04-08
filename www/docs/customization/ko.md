@@ -124,6 +124,12 @@ kos:
       - FOO=bar
       - SOMETHING=value
 
+    # Whether to disable this particular Ko configuration.
+    #
+    # Templates: allowed.
+    # <!-- md:inline_version v2.8 -->.
+    disable: "{{ .IsSnapshot }}"
+
     # Bare uses a tag on the $KO_DOCKER_REPO without anything additional.
     bare: true
 
@@ -163,7 +169,7 @@ builds:
       - arm64
 
 kos:
-  - repository: ghcr.io/caarlos0/test-ko
+  - repositories: [ghcr.io/caarlos0/test-ko]
     tags:
       - "{{.Version}}"
       - latest
@@ -188,4 +194,4 @@ docker_signs:
 ```
 
 [ko]: https://ko.build
-[build]: builds.md
+[build]: builds/go.md

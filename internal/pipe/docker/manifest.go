@@ -3,9 +3,11 @@ package docker
 import (
 	"fmt"
 	"maps"
+	"math"
 	"slices"
 	"strings"
 
+	"github.com/agnivade/levenshtein"
 	"github.com/caarlos0/log"
 	"github.com/goreleaser/goreleaser/v2/internal/artifact"
 	"github.com/goreleaser/goreleaser/v2/internal/ids"
@@ -86,7 +88,9 @@ func (ManifestPipe) Publish(ctx *context.Context) error {
 
 			manifester := manifesters[manifest.Use]
 
-			log.WithField("manifest", name).WithField("images", images).Info("creating")
+			log.WithField("manifest", name).
+				WithField("images", images).
+				Info("creating")
 			if err := manifester.Create(ctx, name, images, manifest.CreateFlags); err != nil {
 				return err
 			}
@@ -94,13 +98,13 @@ func (ManifestPipe) Publish(ctx *context.Context) error {
 				Type:  artifact.DockerManifest,
 				Name:  name,
 				Path:  name,
-				Extra: map[string]interface{}{},
+				Extra: map[string]any{},
 			}
 			if manifest.ID != "" {
 				art.Extra[artifact.ExtraID] = manifest.ID
 			}
 
-			log.WithField("manifest", name).Info("pushing")
+			log.WithField("manifest", name).Info("created, pushing")
 			digest, err := manifester.Push(ctx, name, manifest.PushFlags)
 			if err != nil {
 				return err
@@ -139,7 +143,7 @@ func manifestImages(ctx *context.Context, manifest config.DockerManifest) ([]str
 		if err != nil {
 			return []string{}, err
 		}
-		imgs = append(imgs, withDigest(manifest.Use, str, artifacts))
+		imgs = append(imgs, withDigest(str, artifacts))
 	}
 	if strings.TrimSpace(strings.Join(manifest.ImageTemplates, "")) == "" {
 		return imgs, pipe.Skip("manifest has no images")
@@ -147,15 +151,26 @@ func manifestImages(ctx *context.Context, manifest config.DockerManifest) ([]str
 	return imgs, nil
 }
 
-func withDigest(use, name string, images []*artifact.Artifact) string {
+func withDigest(name string, images []*artifact.Artifact) string {
 	for _, art := range images {
 		if art.Name == name {
 			if digest := artifact.ExtraOr(*art, artifact.ExtraDigest, ""); digest != "" {
 				return name + "@" + digest
 			}
-			break
+			log.Warnf("unknown digest for %q, using insecure mode", name)
+			return name
 		}
 	}
-	log.Warnf("did not find the digest for %s using %s, defaulting to insecure mode", name, use)
+
+	suggestion := ""
+	suggestionDistance := math.MaxInt
+	for _, img := range images {
+		if d := levenshtein.ComputeDistance(name, img.Name); d < suggestionDistance {
+			suggestion = name
+			suggestionDistance = d
+		}
+	}
+
+	log.Warnf("could not find %q, did you mean %q?", name, suggestion)
 	return name
 }

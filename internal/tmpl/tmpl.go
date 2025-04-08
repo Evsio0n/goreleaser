@@ -26,7 +26,7 @@ type Template struct {
 }
 
 // Fields that will be available to the template engine.
-type Fields map[string]interface{}
+type Fields map[string]any
 
 // Template fields names used in build targets and more.
 const (
@@ -105,8 +105,8 @@ func New(ctx *context.Context) *Template {
 		treeState = "dirty"
 	}
 
-	fields := map[string]interface{}{}
-	for k, v := range map[string]interface{}{
+	fields := map[string]any{}
+	maps.Copy(fields, map[string]any{
 		projectName:     ctx.Config.ProjectName,
 		modulePath:      ctx.ModulePath,
 		version:         ctx.Version,
@@ -142,22 +142,32 @@ func New(ctx *context.Context) *Template {
 		tagContents:     ctx.Git.TagContents,
 		tagBody:         ctx.Git.TagBody,
 		runtimeK:        ctx.Runtime,
-	} {
-		fields[k] = v
-	}
+	})
 
 	return &Template{
 		fields: fields,
 	}
 }
 
+// SetEnv adds a single environment variable into the template env.
+func (t *Template) SetEnv(single string) *Template {
+	k, v, ok := strings.Cut(single, "=")
+	if !ok || k == "" {
+		return t
+	}
+	// TODO: handle delete?
+	tt := t.copying()
+	envs := tt.fields[env].(context.Env)
+	envs[k] = v
+	tt.fields[env] = envs
+	return tt
+}
+
 // WithExtraFields allows to add new more custom fields to the template.
 // It will override fields with the same name.
 func (t *Template) WithExtraFields(f Fields) *Template {
 	tt := t.copying()
-	for k, v := range f {
-		tt.fields[k] = v
-	}
+	maps.Copy(tt.fields, f)
 	return tt
 }
 
@@ -197,7 +207,7 @@ func (t *Template) WithArtifact(a *artifact.Artifact) *Template {
 		target:       a.Target,
 		binary:       artifact.ExtraOr(*a, binary, t.fields[projectName].(string)),
 		artifactName: a.Name,
-		artifactExt:  artifact.ExtraOr(*a, artifact.ExtraExt, ""),
+		artifactExt:  a.Ext(),
 		artifactPath: a.Path,
 	})
 }
@@ -376,20 +386,20 @@ func (t *Template) ApplySingleEnvOnly(s string) (string, error) {
 		return "", nil
 	}
 
+	var out bytes.Buffer
+	tmpl, err := template.New("tmpl").
+		Option("missingkey=error").
+		Parse(s)
+	if err != nil {
+		return "", newTmplError(s, err)
+	}
+
 	// text/template/parse (lexer) could be used here too,
 	// but regexp reduces the complexity and should be sufficient,
 	// given the context is mostly discouraging users from bad practice
 	// of hard-coded credentials, rather than catch all possible cases
 	if !envOnlyRe.MatchString(s) {
 		return "", ExpectedSingleEnvErr{}
-	}
-
-	var out bytes.Buffer
-	tmpl, err := template.New("tmpl").
-		Option("missingkey=error").
-		Parse(s)
-	if err != nil {
-		return "", err
 	}
 
 	err = tmpl.Execute(&out, t.fields)
@@ -419,7 +429,7 @@ func filter(reverse bool) func(content, exp string) string {
 	return func(content, exp string) string {
 		re := regexp.MustCompilePOSIX(exp)
 		var lines []string
-		for _, line := range strings.Split(content, "\n") {
+		for line := range strings.SplitSeq(content, "\n") {
 			if reverse && re.MatchString(line) {
 				continue
 			}

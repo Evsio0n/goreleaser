@@ -1,7 +1,10 @@
 package client
 
 import (
-	"math/rand"
+	"fmt"
+	"math/rand/v2"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/goreleaser/goreleaser/v2/internal/testctx"
@@ -60,8 +63,7 @@ func TestNewReleaseClient(t *testing.T) {
 func TestClientNewGitea(t *testing.T) {
 	ctx := testctx.NewWithCfg(config.Project{
 		GiteaURLs: config.GiteaURLs{
-			// TODO: use a mocked http server to cover version api
-			API:      "https://gitea.com/api/v1",
+			API:      fakeGitea(t).URL,
 			Download: "https://gitea.com",
 		},
 	}, testctx.GiteaTokenType)
@@ -94,7 +96,7 @@ func TestCheckBodyMaxLength(t *testing.T) {
 	letters := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 	b := make([]rune, maxReleaseBodyLength)
 	for i := range b {
-		b[i] = letters[rand.Intn(len(letters))]
+		b[i] = letters[rand.N(len(letters))]
 	}
 	out := truncateReleaseBody(string(b))
 	require.Len(t, out, maxReleaseBodyLength)
@@ -111,7 +113,7 @@ func TestNewIfToken(t *testing.T) {
 		ctx = testctx.NewWithCfg(config.Project{
 			Env: []string{"VAR=giteatoken"},
 			GiteaURLs: config.GiteaURLs{
-				API: "https://gitea.com/api/v1",
+				API: fakeGitea(t).URL,
 			},
 		}, testctx.GiteaTokenType)
 		client, err = NewIfToken(ctx, client, "{{ .Env.VAR }}")
@@ -156,7 +158,7 @@ func TestNewWithToken(t *testing.T) {
 		ctx := testctx.NewWithCfg(config.Project{
 			Env: []string{"TK=token"},
 			GiteaURLs: config.GiteaURLs{
-				API: "https://gitea.com/api/v1",
+				API: fakeGitea(t).URL,
 			},
 		}, testctx.GiteaTokenType)
 
@@ -179,5 +181,19 @@ func TestNewWithToken(t *testing.T) {
 
 func TestClientBlanks(t *testing.T) {
 	repo := Repo{}
-	require.Equal(t, "", repo.String())
+	require.Empty(t, repo.String())
+}
+
+func fakeGitea(tb testing.TB) *httptest.Server {
+	tb.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		if r.URL.Path == "/api/v1/version" {
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, `{"version":"v1.11.0"}`)
+			return
+		}
+	}))
+	tb.Cleanup(srv.Close)
+	return srv
 }

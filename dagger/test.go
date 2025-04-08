@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"runtime"
 
-	"github.com/goreleaser/goreleaser/dagger/internal/dagger"
+	"github.com/goreleaser/goreleaser/v2/dagger/internal/dagger"
 )
 
 const (
@@ -94,7 +94,7 @@ func installNix(target *dagger.Container) *dagger.Container {
 		"nix-env",
 		"nix-hash",
 		"nix-instantiate",
-		"nix-prefetch-url",
+		"nix-hash",
 		"nix-shell",
 		"nix-store",
 	}

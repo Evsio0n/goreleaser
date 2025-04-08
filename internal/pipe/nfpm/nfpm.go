@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"dario.cat/mergo"
 	"github.com/caarlos0/log"
@@ -72,6 +73,10 @@ func (Pipe) Default(ctx *context.Context) error {
 		if fpm.Maintainer == "" {
 			deprecate.NoticeCustom(ctx, "nfpms.maintainer", "`{{ .Property }}` should always be set, check {{ .URL }} for more info")
 		}
+		if len(fpm.Builds) > 0 {
+			deprecate.Notice(ctx, "nfpms.builds")
+			fpm.IDs = append(fpm.IDs, fpm.Builds...)
+		}
 		ids.Inc(fpm.ID)
 	}
 
@@ -81,16 +86,22 @@ func (Pipe) Default(ctx *context.Context) error {
 
 // Run the pipe.
 func (Pipe) Run(ctx *context.Context) error {
+	skips := pipe.SkipMemento{}
 	for _, nfpm := range ctx.Config.NFPMs {
 		if len(nfpm.Formats) == 0 {
-			// FIXME: this assumes other nfpm configs will fail too...
-			return pipe.Skip("no output formats configured")
+			skips.Remember(pipe.Skip("no output formats configured"))
+			continue
 		}
-		if err := doRun(ctx, nfpm); err != nil {
+		err := doRun(ctx, nfpm)
+		if pipe.IsSkip(err) {
+			skips.Remember(err)
+			continue
+		}
+		if err != nil {
 			return err
 		}
 	}
-	return nil
+	return skips.Evaluate()
 }
 
 func doRun(ctx *context.Context, fpm config.NFPM) error {
@@ -108,14 +119,14 @@ func doRun(ctx *context.Context, fpm config.NFPM) error {
 			artifact.ByGoos("aix"),
 		),
 	}
-	if len(fpm.Builds) > 0 {
-		filters = append(filters, artifact.ByIDs(fpm.Builds...))
+	if len(fpm.IDs) > 0 {
+		filters = append(filters, artifact.ByIDs(fpm.IDs...))
 	}
 	linuxBinaries := ctx.Artifacts.
 		Filter(artifact.And(filters...)).
 		GroupByPlatform()
 	if len(linuxBinaries) == 0 {
-		return fmt.Errorf("no linux/unix binaries found for builds %v", fpm.Builds)
+		return fmt.Errorf("no linux/unix binaries found for builds %v", fpm.IDs)
 	}
 	g := semerrgroup.New(ctx.Parallelism)
 	for _, format := range fpm.Formats {
@@ -265,12 +276,21 @@ func create(ctx *context.Context, fpm config.NFPM, format string, artifacts []*a
 		&fpm.Homepage,
 		&fpm.Description,
 		&fpm.Maintainer,
+		&fpm.MTime,
 		&overridden.Scripts.PostInstall,
 		&overridden.Scripts.PreInstall,
 		&overridden.Scripts.PostRemove,
 		&overridden.Scripts.PreRemove,
 	); err != nil {
 		return err
+	}
+
+	if fpm.MTime != "" {
+		var err error
+		fpm.ParsedMTime, err = time.Parse(time.RFC3339Nano, fpm.MTime)
+		if err != nil {
+			return fmt.Errorf("failed to parse %s: %w", fpm.MTime, err)
+		}
 	}
 
 	// We cannot use t.ApplyAll on the following fields as they are shared
@@ -317,20 +337,33 @@ func create(ctx *context.Context, fpm config.NFPM, format string, artifacts []*a
 
 	contents := files.Contents{}
 	for _, content := range overridden.Contents {
-		src, err := t.Apply(content.Source)
-		if err != nil {
+		if err := t.ApplyAll(
+			&content.Source,
+			&content.Destination,
+			&content.FileInfo.Owner,
+			&content.FileInfo.Group,
+			&content.FileInfo.MTime,
+		); err != nil {
 			return err
 		}
-		dst, err := t.Apply(content.Destination)
-		if err != nil {
-			return err
+		if content.FileInfo.MTime != "" {
+			var err error
+			content.FileInfo.ParsedMTime, err = time.Parse(time.RFC3339Nano, content.FileInfo.MTime)
+			if err != nil {
+				return fmt.Errorf("failed to parse %s: %w", fpm.MTime, err)
+			}
 		}
 		contents = append(contents, &files.Content{
-			Source:      filepath.ToSlash(src),
-			Destination: filepath.ToSlash(dst),
+			Source:      filepath.ToSlash(content.Source),
+			Destination: filepath.ToSlash(content.Destination),
 			Type:        content.Type,
 			Packager:    content.Packager,
-			FileInfo:    content.FileInfo,
+			FileInfo: &files.ContentFileInfo{
+				Owner: content.FileInfo.Owner,
+				Group: content.FileInfo.Group,
+				Mode:  content.FileInfo.Mode,
+				MTime: content.FileInfo.ParsedMTime,
+			},
 		})
 	}
 
@@ -357,7 +390,8 @@ func create(ctx *context.Context, fpm config.NFPM, format string, artifacts []*a
 				Source:      filepath.ToSlash(src),
 				Destination: filepath.ToSlash(dst),
 				FileInfo: &files.ContentFileInfo{
-					Mode: 0o755,
+					Mode:  0o755,
+					MTime: fpm.ParsedMTime,
 				},
 			})
 		}
@@ -382,6 +416,7 @@ func create(ctx *context.Context, fpm config.NFPM, format string, artifacts []*a
 		Homepage:        fpm.Homepage,
 		License:         fpm.License,
 		Changelog:       fpm.Changelog,
+		MTime:           fpm.ParsedMTime,
 		Overridables: nfpm.Overridables{
 			Umask:      overridden.Umask,
 			Conflicts:  overridden.Conflicts,
@@ -404,6 +439,7 @@ func create(ctx *context.Context, fpm config.NFPM, format string, artifacts []*a
 				Scripts: nfpm.DebScripts{
 					Rules:     overridden.Deb.Scripts.Rules,
 					Templates: overridden.Deb.Scripts.Templates,
+					Config:    overridden.Deb.Scripts.Config,
 				},
 				Triggers: nfpm.DebTriggers{
 					Interest:        overridden.Deb.Triggers.Interest,
@@ -519,6 +555,11 @@ func create(ctx *context.Context, fpm config.NFPM, format string, artifacts []*a
 	if err := w.Close(); err != nil {
 		return fmt.Errorf("could not close package file: %w", err)
 	}
+	if !fpm.ParsedMTime.IsZero() {
+		if err := os.Chtimes(path, fpm.ParsedMTime, fpm.ParsedMTime); err != nil {
+			return fmt.Errorf("could not set package mtime: %w", err)
+		}
+	}
 	ctx.Artifacts.Add(&artifact.Artifact{
 		Type:    artifact.LinuxPackage,
 		Name:    packageFilename,
@@ -528,7 +569,7 @@ func create(ctx *context.Context, fpm config.NFPM, format string, artifacts []*a
 		Goarm:   artifacts[0].Goarm,
 		Gomips:  artifacts[0].Gomips,
 		Goamd64: artifacts[0].Goamd64,
-		Extra: map[string]interface{}{
+		Extra: map[string]any{
 			artifact.ExtraID:     fpm.ID,
 			artifact.ExtraFormat: format,
 			artifact.ExtraExt:    "." + format,

@@ -1,15 +1,27 @@
 <p align="center">
-  <img alt="GoReleaser Logo" src="https://avatars2.githubusercontent.com/u/24697112?v=3&s=200" height="140" />
+  <img alt="GoReleaser Logo" src="https://avatars2.githubusercontent.com/u/24697112?v=3&s=200" height="200" />
   <h3 align="center">GoReleaser</h3>
   <p align="center">Release engineering, simplified.</p>
+  <p align="center">
+    <img alt="Go" src="./www/docs/static/go-light.svg#gh-light-mode-only" height="60" />
+    <img alt="Go" src="./www/docs/static/go-dark.svg#gh-dark-mode-only" height="60" />
+    <img alt="Rust" src="./www/docs/static/rust-light.svg#gh-light-mode-only" height="60" />
+    <img alt="Rust" src="./www/docs/static/rust-dark.svg#gh-dark-mode-only" height="60" />
+    <img alt="Zig" src="./www/docs/static/zig-light.svg#gh-light-mode-only" height="60" />
+    <img alt="Zig" src="./www/docs/static/zig-dark.svg#gh-dark-mode-only" height="60" />
+    <img alt="Bun" src="./www/docs/static/bun-light.svg#gh-light-mode-only" height="60" />
+    <img alt="Bun" src="./www/docs/static/bun-dark.svg#gh-dark-mode-only" height="60" />
+    <img alt="Deno" src="./www/docs/static/deno-light.svg#gh-light-mode-only" height="60" />
+    <img alt="Deno" src="./www/docs/static/deno-dark.svg#gh-dark-mode-only" height="60" />
+  </p>
 </p>
 
 ---
 
-GoReleaser builds Go binaries for several platforms, creates a GitHub release and then
-pushes a Homebrew formula to a tap repository. All that wrapped in your favorite CI.
+We handle the complexities of releasing so you can focus in building what really
+matters: **your software**.
 
-![](https://raw.githubusercontent.com/goreleaser/example-simple/main/goreleaser.gif)
+![](https://goreleaser.com/static/goreleaser.png)
 
 ---
 
@@ -54,6 +66,7 @@ Please refer to our [contributing guidelines](CONTRIBUTING.md) for further infor
 [![Sponsors on Open Collective](https://opencollective.com/goreleaser/sponsors/badge.svg?style=for-the-badge)](https://opencollective.com/goreleaser/sponsors/)
 [![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-yellow.svg?style=for-the-badge)](https://conventionalcommits.org)
 [![CII Best Practices](https://img.shields.io/cii/summary/5420?label=openssf%20best%20practices&style=for-the-badge)](https://bestpractices.coreinfrastructure.org/projects/5420)
+[![GoReportCard](https://goreportcard.com/badge/github.com/goreleaser/goreleaser?style=for-the-badge)](https://goreportcard.com/report/github.com/goreleaser/goreleaser)
 
 ## GitHub Sponsors
 
@@ -122,9 +135,9 @@ Love our work and community? [Become a backer](https://opencollective.com/gorele
 
 ### Contributors
 
-This project exists thanks to all the people who contribute. [[Contribute](CONTRIBUTING.md)].
-<a href="https://github.com/goreleaser/goreleaser/graphs/contributors"><img src="https://opencollective.com/goreleaser/contributors.svg?width=890" /></a>
+This project exists thanks to all the people who contribute.
+[Contribution guide](CONTRIBUTING.md).
 
-## Stargazers over time
+## Stars
 
 [![Stargazers over time](https://starchart.cc/goreleaser/goreleaser.svg?variant=adaptive)](https://starchart.cc/goreleaser/goreleaser)

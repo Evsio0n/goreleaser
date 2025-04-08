@@ -20,6 +20,7 @@ type templateData struct {
 	Prepare      string
 	Build        string
 	Package      string
+	Install      string
 }
 
 type sources struct {
@@ -62,11 +63,14 @@ optdepends=({{ pkgArray . }})
 {{- with .Backup }}
 backup=({{ pkgArray . }})
 {{- end }}
+{{- if .Install }}
+install={{ .Name }}.install
+{{- end }}
 
 {{- with .Sources }}
 source=("${pkgname}_${pkgver}.{{ .Format }}::{{ .DownloadURL }}")
 sha256sums=('{{ .SHA256 }}')
-{{- end }}
+{{ end }}
 
 {{-  with .Prepare -}}
 prepare() {

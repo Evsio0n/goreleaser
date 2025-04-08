@@ -1,3 +1,4 @@
+// Package mastodon announces releases on Mastodon.
 package mastodon
 
 import (
@@ -16,8 +17,9 @@ type Pipe struct{}
 
 func (Pipe) String() string { return "mastodon" }
 
-func (Pipe) Skip(ctx *context.Context) bool {
-	return !ctx.Config.Announce.Mastodon.Enabled || ctx.Config.Announce.Mastodon.Server == ""
+func (Pipe) Skip(ctx *context.Context) (bool, error) {
+	enable, err := tmpl.New(ctx).Bool(ctx.Config.Announce.Mastodon.Enabled)
+	return !enable || ctx.Config.Announce.Mastodon.Server == "", err
 }
 
 type Config struct {

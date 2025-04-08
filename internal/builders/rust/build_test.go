@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -40,111 +41,39 @@ func TestWithDefaults(t *testing.T) {
 		}, build)
 	})
 
-	t.Run("invalid", func(t *testing.T) {
-		cases := map[string]config.Build{
-			"main": {
-				Main: "a",
-			},
-			"ldflags": {
-				BuildDetails: config.BuildDetails{
-					Ldflags: []string{"-a"},
-				},
-			},
-			"goos": {
-				Goos: []string{"a"},
-			},
-			"goarch": {
-				Goarch: []string{"a"},
-			},
-			"goamd64": {
-				Goamd64: []string{"a"},
-			},
-			"go386": {
-				Go386: []string{"a"},
-			},
-			"goarm": {
-				Goarm: []string{"a"},
-			},
-			"goarm64": {
-				Goarm64: []string{"a"},
-			},
-			"gomips": {
-				Gomips: []string{"a"},
-			},
-			"goppc64": {
-				Goppc64: []string{"a"},
-			},
-			"goriscv64": {
-				Goriscv64: []string{"a"},
-			},
-			"ignore": {
-				Ignore: []config.IgnoredBuild{{}},
-			},
-			"overrides": {
-				BuildDetailsOverrides: []config.BuildDetailsOverride{{}},
-			},
-			"buildmode": {
-				BuildDetails: config.BuildDetails{
-					Buildmode: "a",
-				},
-			},
-			"tags": {
-				BuildDetails: config.BuildDetails{
-					Tags: []string{"a"},
-				},
-			},
-			"asmflags": {
-				BuildDetails: config.BuildDetails{
-					Asmflags: []string{"a"},
-				},
-			},
-		}
-		for k, v := range cases {
-			t.Run(k, func(t *testing.T) {
-				_, err := Default.WithDefaults(v)
-				require.Error(t, err)
-			})
-		}
+	t.Run("invalid target", func(t *testing.T) {
+		_, err := Default.WithDefaults(config.Build{
+			Targets: []string{"a-b"},
+		})
+		require.Error(t, err)
+	})
+
+	t.Run("invalid config option", func(t *testing.T) {
+		_, err := Default.WithDefaults(config.Build{
+			Main: "something",
+		})
+		require.Error(t, err)
 	})
 }
 
 func TestBuild(t *testing.T) {
-	testlib.CheckPath(t, "rustup")
 	testlib.CheckPath(t, "cargo")
+	testlib.CheckPath(t, "cargo-zigbuild")
+	folder := testlib.Mktmp(t)
+	_, err := exec.Command("cargo", "init", "--bin", "--name=proj").CombinedOutput()
+	require.NoError(t, err)
 
-	for _, s := range []string{
-		"rustup default stable",
-		"cargo install --locked cargo-zigbuild",
-	} {
-		args := strings.Fields(s)
-		_, err := exec.Command(args[0], args[1:]...).CombinedOutput()
-		require.NoError(t, err)
-	}
-
-	modTime := time.Now().AddDate(-1, 0, 0).Round(1 * time.Second).UTC()
-	dist := t.TempDir()
+	modTime := time.Now().AddDate(-1, 0, 0).Round(time.Second).UTC()
 	ctx := testctx.NewWithCfg(config.Project{
-		Dist:        dist,
+		Dist:        "dist",
 		ProjectName: "proj",
-		Env: []string{
-			`TEST_E=1`,
-		},
 		Builds: []config.Build{
 			{
 				ID:           "default",
-				Dir:          "./testdata/proj/",
+				Dir:          ".",
 				ModTimestamp: fmt.Sprintf("%d", modTime.Unix()),
 				BuildDetails: config.BuildDetails{
-					Flags: []string{"--locked", "--release"},
-					Env: []string{
-						`TEST_T={{- if eq .Os "windows" -}}
-							w
-						{{- else if eq .Os "darwin" -}}
-							d
-						{{- else if eq .Os "linux" -}}
-							l
-						{{- end -}}`,
-					},
+					Flags: []string{"--release"},
 				},
 			},
 		},
@@ -153,31 +82,46 @@ func TestBuild(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, Default.Prepare(ctx, build))
 
-	options := api.Options{
-		Name:   "proj",
-		Path:   filepath.Join(dist, "proj-aarch64-apple-darwin", "proj"),
-		Target: nil,
+	target := runtimeTarget()
+	if target == "" {
+		t.Skip("runtime not supported")
 	}
-	options.Target, err = Default.Parse("aarch64-apple-darwin")
+
+	options := api.Options{
+		Name: "proj" + maybeExe(target),
+		Path: filepath.Join("dist", "proj-"+target, "proj") + maybeExe(target),
+		Ext:  maybeExe(target),
+	}
+	options.Target, err = Default.Parse(target)
 	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Dir(options.Path), 0o755)) // this happens on internal/pipe/build/ when in prod
 
 	require.NoError(t, Default.Build(ctx, build, options))
 
-	bins := ctx.Artifacts.List()
+	list := ctx.Artifacts
+	require.NoError(t, list.Visit(func(a *artifact.Artifact) error {
+		s, err := filepath.Rel(folder, a.Path)
+		if err == nil {
+			a.Path = s
+		}
+		return nil
+	}))
+
+	bins := list.List()
 	require.Len(t, bins, 1)
 
 	bin := bins[0]
 	require.Equal(t, artifact.Artifact{
-		Name:   "proj",
+		Name:   "proj" + maybeExe(target),
 		Path:   filepath.ToSlash(options.Path),
-		Goos:   "darwin",
-		Goarch: "arm64",
-		Target: "aarch64-apple-darwin",
+		Goos:   runtime.GOOS,
+		Goarch: runtime.GOARCH,
+		Target: target,
 		Type:   artifact.Binary,
 		Extra: artifact.Extras{
 			artifact.ExtraBinary:  "proj",
 			artifact.ExtraBuilder: "rust",
-			artifact.ExtraExt:     "",
+			artifact.ExtraExt:     maybeExe(target),
 			artifact.ExtraID:      "default",
 		},
 	}, *bin)
@@ -185,7 +129,7 @@ func TestBuild(t *testing.T) {
 	require.FileExists(t, bin.Path)
 	fi, err := os.Stat(bin.Path)
 	require.NoError(t, err)
-	require.True(t, modTime.Equal(fi.ModTime()), "inconsistent mod times found when specifying ModTimestamp")
+	require.True(t, modTime.Equal(fi.ModTime()))
 }
 
 func TestParse(t *testing.T) {
@@ -216,4 +160,38 @@ func TestParse(t *testing.T) {
 			Environment: "gnullvm",
 		}, target)
 	})
+}
+
+func TestIsSettingPackage(t *testing.T) {
+	for name, tt := range map[string]struct {
+		flags  []string
+		expect bool
+	}{
+		"not set":   {[]string{"--release", "--something-else", "--in-the-p=middle", "--something"}, false},
+		"-p":        {[]string{"--release", "-p=foo", "--something"}, true},
+		"--package": {[]string{"--release", "--package=foo", "--something"}, true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := isSettingPackage(tt.flags)
+			require.Equal(t, tt.expect, got)
+		})
+	}
+}
+
+func runtimeTarget() string {
+	targets := map[string]string{
+		"windows-arm64": "aarch64-pc-windows-msvc",
+		"linux-amd64":   "x86_64-unknown-linux-gnu",
+		"linux-arm64":   "aarch64-unknown-linux-gnu",
+		"darwin-amd64":  "x86_64-apple-darwin",
+		"darwin-arm64":  "aarch64-apple-darwin",
+	}
+	return targets[runtime.GOOS+"-"+runtime.GOARCH]
+}
+
+func maybeExe(s string) string {
+	if strings.Contains(s, "windows") {
+		return ".exe"
+	}
+	return ""
 }

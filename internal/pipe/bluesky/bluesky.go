@@ -1,3 +1,4 @@
+// Package bluesky announces to bluesky.social.
 package bluesky
 
 import (
@@ -22,8 +23,11 @@ const (
 
 type Pipe struct{}
 
-func (Pipe) String() string                 { return "bluesky" }
-func (Pipe) Skip(ctx *context.Context) bool { return !ctx.Config.Announce.Bluesky.Enabled }
+func (Pipe) String() string { return "bluesky" }
+func (Pipe) Skip(ctx *context.Context) (bool, error) {
+	enable, err := tmpl.New(ctx).Bool(ctx.Config.Announce.Bluesky.Enabled)
+	return !enable, err
+}
 
 type Config struct {
 	Password string `env:"BLUESKY_APP_PASSWORD,notEmpty"`

@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	// langs to init.
+	_ "github.com/goreleaser/goreleaser/v2/internal/builders/bun"
+	_ "github.com/goreleaser/goreleaser/v2/internal/builders/deno"
 	_ "github.com/goreleaser/goreleaser/v2/internal/builders/golang"
 	_ "github.com/goreleaser/goreleaser/v2/internal/builders/rust"
 	_ "github.com/goreleaser/goreleaser/v2/internal/builders/zig"
@@ -25,12 +27,16 @@ func TestSystemStringer(t *testing.T) {
 func TestBuildDependencies(t *testing.T) {
 	ctx := testctx.NewWithCfg(config.Project{
 		Builds: []config.Build{
+			{Builder: "bun"},
+			{Builder: "deno"},
 			{Builder: "go"},
 			{Builder: "rust"},
 			{Builder: "zig"},
 		},
 	})
 	require.Equal(t, []string{
+		"bun",
+		"deno",
 		"go",
 		"cargo",
 		"rustup",

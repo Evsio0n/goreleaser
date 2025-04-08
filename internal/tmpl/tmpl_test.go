@@ -40,7 +40,7 @@ func TestWithArtifact(t *testing.T) {
 		}),
 		testctx.WithEnv(map[string]string{
 			"FOO":          "bar",
-			"MULTILINE":    "something with\nmultiple lines\nremove this\nto test things",
+			"MULTILINE":    "something with\nmultiple lines\nremove this\n to test things",
 			"WITH_SLASHES": "foo/bar",
 		}),
 		testctx.WithSemver(1, 2, 3, ""),
@@ -109,7 +109,7 @@ func TestWithArtifact(t *testing.T) {
 		"artifact dir: " + filepath.FromSlash("/tmp"): "artifact dir: {{ dir .ArtifactPath }}",
 
 		"remove this": "{{ filter .Env.MULTILINE \".*remove.*\" }}",
-		"something with\nmultiple lines\nto test things": "{{ reverseFilter .Env.MULTILINE \".*remove.*\" }}",
+		"something with\nmultiple lines\n to test things": "{{ reverseFilter .Env.MULTILINE \".*remove.*\" }}",
 
 		// maps
 		"123": `{{ $m := map "a" "1" "b" "2" }}{{ index $m "a" }}{{ indexOrDefault $m "b" "10" }}{{ indexOrDefault $m "c" "3" }}{{ index $m "z" }}`,
@@ -130,7 +130,7 @@ func TestWithArtifact(t *testing.T) {
 					Goppc64:   "power8",
 					Goriscv64: "rva22u64",
 					Target:    "a_fake_target",
-					Extra: map[string]interface{}{
+					Extra: map[string]any{
 						artifact.ExtraBinary: "binary",
 						artifact.ExtraExt:    ".exe",
 					},
@@ -221,6 +221,23 @@ func TestWithEnvS(t *testing.T) {
 	out, err = tpl.Apply(`{{ isEnvSet "NOPE" }}`)
 	require.NoError(t, err)
 	require.Equal(t, "false", out)
+}
+
+func TestSetEnv(t *testing.T) {
+	ctx := testctx.New()
+	tpl := New(ctx).
+		WithEnvS([]string{
+			"FOO=foo",
+		}).
+		SetEnv("BAR=bar").
+		SetEnv("NOVAL=").
+		SetEnv("=NOKEY").
+		SetEnv("=").
+		SetEnv("NOTHING")
+
+	out, err := tpl.Apply("{{ .Env.FOO }}-{{ .Env.BAR }}")
+	require.NoError(t, err)
+	require.Equal(t, "foo-bar", out)
 }
 
 func TestFuncMap(t *testing.T) {
@@ -324,6 +341,24 @@ func TestFuncMap(t *testing.T) {
 	}
 }
 
+func TestApplyAll(t *testing.T) {
+	tpl := New(testctx.New()).WithEnvS([]string{
+		"FOO=bar",
+	})
+	t.Run("success", func(t *testing.T) {
+		foo := "{{.Env.FOO}}"
+		require.NoError(t, tpl.ApplyAll(&foo))
+		require.Equal(t, "bar", foo)
+	})
+	t.Run("failure", func(t *testing.T) {
+		foo := "{{.Env.FOO}}"
+		bar := "{{.Env.NOPE}}"
+		require.Error(t, tpl.ApplyAll(&foo, &bar))
+		require.Equal(t, "bar", foo)
+		require.Equal(t, "{{.Env.NOPE}}", bar)
+	})
+}
+
 func TestApplySingleEnvOnly(t *testing.T) {
 	ctx := testctx.NewWithCfg(config.Project{
 		Env: []string{
@@ -377,12 +412,22 @@ func TestApplySingleEnvOnly(t *testing.T) {
 			"{{ .ProjectName }}",
 			ExpectedSingleEnvErr{},
 		},
+		{
+			"bad template",
+			"{{ .Env.NOPE }",
+			Error{},
+		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := New(ctx).ApplySingleEnvOnly(tc.tpl)
 			if tc.expectedErr != nil {
 				require.Error(t, err)
+				require.NotEmpty(t, err.Error())
+				eerr, ok := err.(Error)
+				if ok {
+					require.Error(t, eerr.Unwrap())
+				}
 			} else {
 				require.NoError(t, err)
 			}
@@ -509,7 +554,7 @@ func TestSlice(t *testing.T) {
 		Goos:   "darwin",
 		Goarch: "amd64",
 		Goarm:  "7",
-		Extra: map[string]interface{}{
+		Extra: map[string]any{
 			artifact.ExtraBinary: "binary",
 		},
 	}

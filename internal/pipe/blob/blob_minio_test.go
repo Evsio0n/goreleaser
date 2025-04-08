@@ -29,7 +29,7 @@ const (
 var listen string
 
 func TestMain(m *testing.M) {
-	if !testlib.InPath("docker") || testlib.IsWindows() {
+	if !testlib.InPath("docker") || testlib.IsWindows() || !testlib.IsDockerRunning() {
 		// there's no minio windows image
 		m.Run()
 		return
@@ -75,7 +75,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestMinioUpload(t *testing.T) {
-	testlib.CheckPath(t, "docker")
+	testlib.CheckDocker(t)
 	testlib.SkipIfWindows(t, "minio image not available for windows")
 	name := "basic"
 	directory := t.TempDir()
@@ -128,7 +128,7 @@ func TestMinioUpload(t *testing.T) {
 		Type: artifact.Signature,
 		Name: "checksum.txt.sig",
 		Path: sigpath,
-		Extra: map[string]interface{}{
+		Extra: map[string]any{
 			artifact.ExtraID: "foo",
 		},
 	})
@@ -136,7 +136,7 @@ func TestMinioUpload(t *testing.T) {
 		Type: artifact.Certificate,
 		Name: "checksum.pem",
 		Path: certpath,
-		Extra: map[string]interface{}{
+		Extra: map[string]any{
 			artifact.ExtraID: "foo",
 		},
 	})
@@ -144,7 +144,7 @@ func TestMinioUpload(t *testing.T) {
 		Type: artifact.UploadableSourceArchive,
 		Name: "source.tar.gz",
 		Path: srcpath,
-		Extra: map[string]interface{}{
+		Extra: map[string]any{
 			artifact.ExtraFormat: "tar.gz",
 		},
 	})
@@ -152,7 +152,7 @@ func TestMinioUpload(t *testing.T) {
 		Type: artifact.UploadableArchive,
 		Name: "bin.tar.gz",
 		Path: tgzpath,
-		Extra: map[string]interface{}{
+		Extra: map[string]any{
 			artifact.ExtraID: "foo",
 		},
 	})
@@ -160,7 +160,7 @@ func TestMinioUpload(t *testing.T) {
 		Type: artifact.LinuxPackage,
 		Name: "bin.deb",
 		Path: debpath,
-		Extra: map[string]interface{}{
+		Extra: map[string]any{
 			artifact.ExtraID: "bar",
 		},
 	})
@@ -182,7 +182,7 @@ func TestMinioUpload(t *testing.T) {
 }
 
 func TestMinioUploadCustomBucketID(t *testing.T) {
-	testlib.CheckPath(t, "docker")
+	testlib.CheckDocker(t)
 	testlib.SkipIfWindows(t, "minio image not available for windows")
 	name := "fromenv"
 	directory := t.TempDir()
@@ -220,7 +220,7 @@ func TestMinioUploadCustomBucketID(t *testing.T) {
 }
 
 func TestMinioUploadExtraFilesOnly(t *testing.T) {
-	testlib.CheckPath(t, "docker")
+	testlib.CheckDocker(t)
 	testlib.SkipIfWindows(t, "minio image not available for windows")
 	name := "only-extra-files"
 	directory := t.TempDir()
@@ -267,7 +267,7 @@ func TestMinioUploadExtraFilesOnly(t *testing.T) {
 }
 
 func TestMinioUploadRootDirectory(t *testing.T) {
-	testlib.CheckPath(t, "docker")
+	testlib.CheckDocker(t)
 	testlib.SkipIfWindows(t, "minio image not available for windows")
 	name := "rootdir"
 	directory := t.TempDir()
@@ -304,7 +304,7 @@ func TestMinioUploadRootDirectory(t *testing.T) {
 }
 
 func TestMinioUploadInvalidCustomBucketID(t *testing.T) {
-	testlib.CheckPath(t, "docker")
+	testlib.CheckDocker(t)
 	testlib.SkipIfWindows(t, "minio image not available for windows")
 	directory := t.TempDir()
 	tgzpath := filepath.Join(directory, "bin.tar.gz")
@@ -338,7 +338,7 @@ func TestMinioUploadInvalidCustomBucketID(t *testing.T) {
 }
 
 func TestMinioUploadSkip(t *testing.T) {
-	testlib.CheckPath(t, "docker")
+	testlib.CheckDocker(t)
 	testlib.SkipIfWindows(t, "minio image not available for windows")
 	name := "basic"
 	directory := t.TempDir()
@@ -380,7 +380,7 @@ func TestMinioUploadSkip(t *testing.T) {
 			Type: artifact.UploadableArchive,
 			Name: "bin.tar.gz",
 			Path: tgzpath,
-			Extra: map[string]interface{}{
+			Extra: map[string]any{
 				artifact.ExtraID: "foo",
 			},
 		})
@@ -388,7 +388,7 @@ func TestMinioUploadSkip(t *testing.T) {
 			Type: artifact.LinuxPackage,
 			Name: "bin.deb",
 			Path: debpath,
-			Extra: map[string]interface{}{
+			Extra: map[string]any{
 				artifact.ExtraID: "bar",
 			},
 		})

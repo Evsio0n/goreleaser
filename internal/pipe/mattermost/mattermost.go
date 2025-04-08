@@ -1,3 +1,4 @@
+// Package mattermost announces releases to Mattermost.
 package mattermost
 
 import (
@@ -23,8 +24,11 @@ const (
 
 type Pipe struct{}
 
-func (Pipe) String() string                 { return "mattermost" }
-func (Pipe) Skip(ctx *context.Context) bool { return !ctx.Config.Announce.Mattermost.Enabled }
+func (Pipe) String() string { return "mattermost" }
+func (Pipe) Skip(ctx *context.Context) (bool, error) {
+	enable, err := tmpl.New(ctx).Bool(ctx.Config.Announce.Mattermost.Enabled)
+	return !enable, err
+}
 
 type Config struct {
 	Webhook string `env:"MATTERMOST_WEBHOOK,notEmpty"`
@@ -141,7 +145,7 @@ type mattermostAttachment struct {
 }
 
 type mattermostAttachmentField struct {
-	Title string      `json:"title"`
-	Value interface{} `json:"value"`
-	Short bool        `json:"short"`
+	Title string `json:"title"`
+	Value any    `json:"value"`
+	Short bool   `json:"short"`
 }

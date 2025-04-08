@@ -1,6 +1,6 @@
 # Arch User Repositories (Sources)
 
-<!-- md:version v2.5-unreleased -->
+<!-- md:version v2.5 -->
 
 After releasing to GitHub, GitLab, or Gitea, GoReleaser can generate and publish
 a `PKGBUILD` to an _Arch User Repository_ based on sources.
@@ -12,8 +12,7 @@ a `PKGBUILD` to an _Arch User Repository_ based on sources.
 
 This page describes the available options.
 
-```yaml
-# .goreleaser.yaml
+```yaml title=".goreleaser.yaml"
 aur_sources:
   - # The package name.
     #
@@ -130,7 +129,15 @@ aur_sources:
       cd "${pkgname}_${pkgver}"
       install -Dsm755 ./myapp "${pkgdir}/usr/bin/myapp"
 
+    # This will be added into the package as 'name.install'.
+    # In this file, you may define functions like `pre_install`, `post_install`,
+    # and so on.
+    #
+    # <!-- md:inline_version v2.8 -->.
+    install: ./scripts/install.sh
+
     # Git author used to commit to the repository.
+    # Templates: allowed.
     commit_author:
       name: goreleaserbot
       email: bot@goreleaser.com
@@ -167,6 +174,12 @@ aur_sources:
     # Default: '.'.
     # Templates: allowed.
     directory: "."
+
+    # Whether to disable this particular AUR configuration.
+    #
+    # Templates: allowed.
+    # <!-- md:inline_version v2.8 -->.
+    disable: "{{ .IsSnapshot }}"
 ```
 
 <!-- md:templates -->

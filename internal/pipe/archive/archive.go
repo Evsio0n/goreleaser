@@ -9,12 +9,14 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 
 	"github.com/caarlos0/log"
 	"github.com/goreleaser/goreleaser/v2/internal/archivefiles"
 	"github.com/goreleaser/goreleaser/v2/internal/artifact"
+	"github.com/goreleaser/goreleaser/v2/internal/deprecate"
 	"github.com/goreleaser/goreleaser/v2/internal/ids"
 	"github.com/goreleaser/goreleaser/v2/internal/semerrgroup"
 	"github.com/goreleaser/goreleaser/v2/internal/skips"
@@ -33,7 +35,7 @@ const (
 // ErrArchiveDifferentBinaryCount happens when an archive uses several builds which have different goos/goarch/etc sets,
 // causing the archives for some platforms to have more binaries than others.
 // GoReleaser breaks in these cases as it will only cause confusion to other users.
-var ErrArchiveDifferentBinaryCount = errors.New("archive has different count of binaries for each platform, which may cause your users confusion.\nLearn more at https://goreleaser.com/errors/multiple-binaries-archive\n") //nolint:revive
+var ErrArchiveDifferentBinaryCount = errors.New("archive has different count of binaries for each platform, which may cause your users confusion.\nLearn more at https://goreleaser.com/errors/multiple-binaries-archive")
 
 //nolint:gochecknoglobals
 var lock sync.Mutex
@@ -57,11 +59,26 @@ func (Pipe) Default(ctx *context.Context) error {
 	}
 	for i := range ctx.Config.Archives {
 		archive := &ctx.Config.Archives[i]
-		if archive.Format == "" {
-			archive.Format = "tar.gz"
+		if archive.Format != "" {
+			deprecate.Notice(ctx, "archives.format")
+			archive.Formats = append(archive.Formats, archive.Format)
+		}
+		if len(archive.Formats) == 0 {
+			archive.Formats = []string{"tar.gz"}
+		}
+		for i := range archive.FormatOverrides {
+			over := &archive.FormatOverrides[i]
+			if over.Format != "" {
+				deprecate.Notice(ctx, "archives.format_overrides.format")
+				over.Formats = append(over.Formats, over.Format)
+			}
 		}
 		if archive.ID == "" {
 			archive.ID = "default"
+		}
+		if len(archive.Builds) > 0 {
+			deprecate.Notice(ctx, "archives.builds")
+			archive.IDs = append(archive.IDs, archive.Builds...)
 		}
 		if len(archive.Files) == 0 {
 			archive.Files = []config.File{
@@ -75,10 +92,11 @@ func (Pipe) Default(ctx *context.Context) error {
 		}
 		if archive.NameTemplate == "" {
 			archive.NameTemplate = defaultNameTemplate
-			if archive.Format == "binary" {
+			if slices.Contains(archive.Formats, "binary") {
 				archive.NameTemplate = defaultBinaryNameTemplate
 			}
 		}
+		archive.BuildsInfo.Mode = 0o755
 		ids.Inc(archive.ID)
 	}
 	return ids.Validate()
@@ -89,9 +107,11 @@ func (Pipe) Run(ctx *context.Context) error {
 	g := semerrgroup.New(ctx.Parallelism)
 	for i, archive := range ctx.Config.Archives {
 		if archive.Meta {
-			g.Go(func() error {
-				return createMeta(ctx, archive)
-			})
+			for _, format := range archive.Formats {
+				g.Go(func() error {
+					return createMeta(ctx, archive, format)
+				})
+			}
 			continue
 		}
 
@@ -102,28 +122,32 @@ func (Pipe) Run(ctx *context.Context) error {
 			artifact.ByType(artifact.CArchive),
 			artifact.ByType(artifact.CShared),
 		)}
-		if len(archive.Builds) > 0 {
-			filter = append(filter, artifact.ByIDs(archive.Builds...))
+		if len(archive.IDs) > 0 {
+			filter = append(filter, artifact.ByIDs(archive.IDs...))
 		}
+
+		isBinary := slices.Contains(archive.Formats, "binary")
 		artifacts := ctx.Artifacts.Filter(artifact.And(filter...)).GroupByPlatform()
-		if err := checkArtifacts(artifacts); err != nil && archive.Format != "binary" && !archive.AllowDifferentBinaryCount {
+		if err := checkArtifacts(artifacts); err != nil && !isBinary && !archive.AllowDifferentBinaryCount {
 			return fmt.Errorf("invalid archive: %d: %w", i, ErrArchiveDifferentBinaryCount)
 		}
 		for group, artifacts := range artifacts {
 			log.Debugf("group %s has %d binaries", group, len(artifacts))
-			format := packageFormat(archive, artifacts[0].Goos)
-			switch format {
-			case "none":
-				// do nothing
-				log.WithField("goos", artifacts[0].Goos).Info("ignored due to format override to 'none'")
-			case "binary":
-				g.Go(func() error {
-					return skip(ctx, archive, artifacts)
-				})
-			default:
-				g.Go(func() error {
-					return create(ctx, archive, artifacts, format)
-				})
+			formats := packageFormats(archive, artifacts[0].Goos)
+			for _, format := range formats {
+				switch format {
+				case "none":
+					// do nothing
+					log.WithField("goos", artifacts[0].Goos).Info("ignored due to format override to 'none'")
+				case "binary":
+					g.Go(func() error {
+						return skip(ctx, archive, artifacts)
+					})
+				default:
+					g.Go(func() error {
+						return create(ctx, archive, artifacts, format)
+					})
+				}
 			}
 		}
 	}
@@ -141,8 +165,8 @@ func checkArtifacts(artifacts map[string][]*artifact.Artifact) error {
 	return ErrArchiveDifferentBinaryCount
 }
 
-func createMeta(ctx *context.Context, arch config.Archive) error {
-	return create(ctx, arch, nil, arch.Format)
+func createMeta(ctx *context.Context, arch config.Archive, format string) error {
+	return create(ctx, arch, nil, format)
 }
 
 func create(ctx *context.Context, arch config.Archive, binaries []*artifact.Artifact, format string) error {
@@ -217,7 +241,7 @@ func create(ctx *context.Context, arch config.Archive, binaries []*artifact.Arti
 		Type: artifact.UploadableArchive,
 		Name: folder + "." + format,
 		Path: archivePath,
-		Extra: map[string]interface{}{
+		Extra: map[string]any{
 			artifact.ExtraID:        arch.ID,
 			artifact.ExtraFormat:    format,
 			artifact.ExtraWrappedIn: wrap,
@@ -235,7 +259,9 @@ func create(ctx *context.Context, arch config.Archive, binaries []*artifact.Arti
 		art.Goppc64 = binaries[0].Goppc64
 		art.Goriscv64 = binaries[0].Goriscv64
 		art.Target = binaries[0].Target
-		art.Extra[artifact.ExtraReplaces] = binaries[0].Extra[artifact.ExtraReplaces]
+		if rep, ok := binaries[0].Extra[artifact.ExtraReplaces]; ok {
+			art.Extra[artifact.ExtraReplaces] = rep
+		}
 	}
 
 	ctx.Artifacts.Add(art)
@@ -259,11 +285,12 @@ func skip(ctx *context.Context, archive config.Archive, binaries []*artifact.Art
 		if err != nil {
 			return err
 		}
-		finalName := name + artifact.ExtraOr(*binary, artifact.ExtraExt, "")
+		finalName := name + binary.Ext()
 		log.WithField("binary", binary.Name).
 			WithField("name", finalName).
 			Info("archiving")
-		ctx.Artifacts.Add(&artifact.Artifact{
+
+		art := &artifact.Artifact{
 			Type:      artifact.UploadableBinary,
 			Name:      finalName,
 			Path:      binary.Path,
@@ -277,24 +304,27 @@ func skip(ctx *context.Context, archive config.Archive, binaries []*artifact.Art
 			Goppc64:   binary.Goppc64,
 			Goriscv64: binary.Goriscv64,
 			Target:    binary.Target,
-			Extra: map[string]interface{}{
-				artifact.ExtraID:       archive.ID,
-				artifact.ExtraFormat:   archive.Format,
-				artifact.ExtraBinary:   binary.Name,
-				artifact.ExtraReplaces: binaries[0].Extra[artifact.ExtraReplaces],
+			Extra: map[string]any{
+				artifact.ExtraID:     archive.ID,
+				artifact.ExtraFormat: "binary",
+				artifact.ExtraBinary: binary.Name,
 			},
-		})
+		}
+		if rep, ok := binaries[0].Extra[artifact.ExtraReplaces]; ok {
+			art.Extra[artifact.ExtraReplaces] = rep
+		}
+		ctx.Artifacts.Add(art)
 	}
 	return nil
 }
 
-func packageFormat(archive config.Archive, platform string) string {
+func packageFormats(archive config.Archive, platform string) []string {
 	for _, override := range archive.FormatOverrides {
 		if strings.HasPrefix(platform, override.Goos) {
-			return override.Format
+			return override.Formats
 		}
 	}
-	return archive.Format
+	return archive.Formats
 }
 
 // NewEnhancedArchive enhances a pre-existing archive.Archive instance

@@ -7,7 +7,6 @@ import (
 	"go/token"
 	"maps"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -15,14 +14,22 @@ import (
 	"dario.cat/mergo"
 	"github.com/caarlos0/log"
 	"github.com/goreleaser/goreleaser/v2/internal/artifact"
-	"github.com/goreleaser/goreleaser/v2/internal/builders/buildtarget"
+	"github.com/goreleaser/goreleaser/v2/internal/builders/common"
 	"github.com/goreleaser/goreleaser/v2/internal/experimental"
-	"github.com/goreleaser/goreleaser/v2/internal/gio"
 	"github.com/goreleaser/goreleaser/v2/internal/logext"
 	"github.com/goreleaser/goreleaser/v2/internal/tmpl"
 	api "github.com/goreleaser/goreleaser/v2/pkg/build"
 	"github.com/goreleaser/goreleaser/v2/pkg/config"
 	"github.com/goreleaser/goreleaser/v2/pkg/context"
+)
+
+const (
+	defaultGoamd64   = "v1"
+	defaultGo386     = "sse2"
+	defaultGoarm64   = "v8.0"
+	defaultGomips    = "hardfloat"
+	defaultGoppc64   = "power8"
+	defaultGoriscv64 = "rva20u64"
 )
 
 // Default builder instance.
@@ -34,6 +41,7 @@ var Default = &Builder{}
 var (
 	_ api.Builder          = &Builder{}
 	_ api.DependingBuilder = &Builder{}
+	_ api.TargetFixer      = &Builder{}
 )
 
 //nolint:gochecknoinits
@@ -116,28 +124,28 @@ func (*Builder) WithDefaults(build config.Build) (config.Build, error) {
 			build.Goarch = []string{"amd64", "arm64", "386"}
 		}
 		if len(build.Goamd64) == 0 {
-			build.Goamd64 = []string{"v1"}
+			build.Goamd64 = []string{defaultGoamd64}
 		}
 		if len(build.Go386) == 0 {
-			build.Go386 = []string{"sse2"}
+			build.Go386 = []string{defaultGo386}
 		}
 		if len(build.Goarm) == 0 {
 			build.Goarm = []string{experimental.DefaultGOARM()}
 		}
 		if len(build.Goarm64) == 0 {
-			build.Goarm64 = []string{"v8.0"}
+			build.Goarm64 = []string{defaultGoarm64}
 		}
 		if len(build.Gomips) == 0 {
-			build.Gomips = []string{"hardfloat"}
+			build.Gomips = []string{defaultGomips}
 		}
 		if len(build.Goppc64) == 0 {
-			build.Goppc64 = []string{"power8"}
+			build.Goppc64 = []string{defaultGoppc64}
 		}
 		if len(build.Goriscv64) == 0 {
-			build.Goriscv64 = []string{"rva20u64"}
+			build.Goriscv64 = []string{defaultGoriscv64}
 		}
 
-		targets, err := buildtarget.List(build)
+		targets, err := listTargets(build)
 		if err != nil {
 			return build, err
 		}
@@ -166,31 +174,36 @@ func (*Builder) WithDefaults(build config.Build) (config.Build, error) {
 	return build, nil
 }
 
+// FixTarget implements build.TargetFixer.
+func (b *Builder) FixTarget(target string) string {
+	return fixTarget(target)
+}
+
 func fixTarget(target string) string {
 	if strings.HasSuffix(target, "_amd64") {
-		return target + "_v1"
+		return target + "_" + defaultGoamd64
 	}
 	if strings.HasSuffix(target, "_386") {
-		return target + "_sse2"
+		return target + "_" + defaultGo386
 	}
 	if strings.HasSuffix(target, "_arm") {
 		return target + "_" + experimental.DefaultGOARM()
 	}
 	if strings.HasSuffix(target, "_arm64") {
-		return target + "_v8.0"
+		return target + "_" + defaultGoarm64
 	}
 	if strings.HasSuffix(target, "_mips") ||
 		strings.HasSuffix(target, "_mips64") ||
 		strings.HasSuffix(target, "_mipsle") ||
 		strings.HasSuffix(target, "_mips64le") {
-		return target + "_hardfloat"
+		return target + "_" + defaultGomips
 	}
 	if strings.HasSuffix(target, "_ppc64") ||
 		strings.HasSuffix(target, "_ppc64le") {
-		return target + "_power8"
+		return target + "_" + defaultGoppc64
 	}
 	if strings.HasSuffix(target, "_riscv64") {
-		return target + "_rva20u64"
+		return target + "_" + defaultGoriscv64
 	}
 	return target
 }
@@ -261,7 +274,7 @@ func (*Builder) Build(ctx *context.Context, build config.Build, options api.Opti
 		Goppc64:   t.Goppc64,
 		Goriscv64: t.Goriscv64,
 		Target:    t.Target,
-		Extra: map[string]interface{}{
+		Extra: map[string]any{
 			artifact.ExtraBinary:  strings.TrimSuffix(filepath.Base(options.Path), options.Ext),
 			artifact.ExtraExt:     options.Ext,
 			artifact.ExtraID:      build.ID,
@@ -287,20 +300,22 @@ func (*Builder) Build(ctx *context.Context, build config.Build, options api.Opti
 	// used for unit testing only
 	testEnvs := []string{}
 	env = append(env, ctx.Env.Strings()...)
-	for _, e := range details.Env {
-		ee, err := tmpl.New(ctx).WithEnvS(env).WithArtifact(a).Apply(e)
-		if err != nil {
-			return err
-		}
-		log.Debugf("env %q evaluated to %q", e, ee)
-		if ee != "" {
-			env = append(env, ee)
-			if strings.HasPrefix(e, "TEST_") {
-				testEnvs = append(testEnvs, ee)
-			}
+
+	tpl := tmpl.New(ctx).
+		WithBuildOptions(options).
+		WithEnvS(env).
+		WithArtifact(a)
+
+	tenv, err := common.TemplateEnv(details.Env, tpl)
+	if err != nil {
+		return err
+	}
+	for _, e := range tenv {
+		if strings.HasPrefix(e, "TEST_") {
+			testEnvs = append(testEnvs, e)
 		}
 	}
-
+	env = append(env, tenv...)
 	env = append(env, t.env()...)
 	if v := os.Getenv("GOCACHEPROG"); v != "" {
 		env = append(env, "GOCACHEPROG="+v)
@@ -315,15 +330,11 @@ func (*Builder) Build(ctx *context.Context, build config.Build, options api.Opti
 		return err
 	}
 
-	if err := run(ctx, cmd, env, build.Dir); err != nil {
-		return fmt.Errorf("failed to build for %s: %w", options.Target, err)
-	}
-
-	modTimestamp, err := tmpl.New(ctx).WithEnvS(env).WithArtifact(a).Apply(build.ModTimestamp)
-	if err != nil {
+	if err := common.Exec(ctx, cmd, env, build.Dir); err != nil {
 		return err
 	}
-	if err := gio.Chtimes(options.Path, modTimestamp); err != nil {
+
+	if err := common.ChTimes(build, tpl, a); err != nil {
 		return err
 	}
 
@@ -334,7 +345,7 @@ func (*Builder) Build(ctx *context.Context, build config.Build, options api.Opti
 func withOverrides(ctx *context.Context, build config.Build, target Target) (config.BuildDetails, error) {
 	optsTarget := target.Target
 	for _, o := range build.BuildDetailsOverrides {
-		overrideTarget, err := tmpl.New(ctx).Apply(formatTarget(o))
+		overrideTarget, err := tmpl.New(ctx).Apply(formatBuildTarget(o))
 		if err != nil {
 			return build.BuildDetails, err
 		}
@@ -444,25 +455,9 @@ func validateUniqueFlags(details config.BuildDetails) {
 	}
 }
 
-func run(ctx *context.Context, command, env []string, dir string) error {
-	/* #nosec */
-	cmd := exec.CommandContext(ctx, command[0], command[1:]...)
-	cmd.Env = env
-	cmd.Dir = dir
-	log.Debug("running")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("%w: %s", err, string(out))
-	}
-	if s := buildOutput(out); s != "" {
-		log.WithField("cmd", command).Info(s)
-	}
-	return nil
-}
-
 func buildOutput(out []byte) string {
 	var lines []string
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
 		if strings.HasPrefix(line, "go: downloading") {
 			continue
 		}
@@ -560,7 +555,7 @@ func getHeaderArtifactForLibrary(build config.Build, options api.Options) *artif
 		Goppc64:   t.Goppc64,
 		Goriscv64: t.Goriscv64,
 		Target:    t.Target,
-		Extra: map[string]interface{}{
+		Extra: map[string]any{
 			artifact.ExtraBinary: headerName,
 			artifact.ExtraExt:    ".h",
 			artifact.ExtraID:     build.ID,

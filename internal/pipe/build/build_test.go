@@ -64,9 +64,6 @@ func (f *fakeBuilder) Build(ctx *context.Context, _ config.Build, options api.Op
 	if f.fail {
 		return errFailedBuild
 	}
-	if err := os.MkdirAll(filepath.Dir(options.Path), 0o755); err != nil {
-		return err
-	}
 	if err := os.WriteFile(options.Path, []byte("foo"), 0o755); err != nil {
 		return err
 	}
@@ -114,9 +111,7 @@ func TestBuild(t *testing.T) {
 			Commit:     "123",
 		}),
 	)
-	opts, err := buildOptionsForTarget(ctx, ctx.Config.Builds[0], "darwin_amd64")
-	require.NoError(t, err)
-	require.NoError(t, doBuild(ctx, ctx.Config.Builds[0], *opts))
+	require.NoError(t, buildTarget(ctx, ctx.Config.Builds[0], "darwin_amd64"))
 }
 
 func TestRunPipe(t *testing.T) {
@@ -388,10 +383,7 @@ func TestDefaultPartialBuilds(t *testing.T) {
 		},
 	})
 	// Create any 'Dir' paths necessary for builds.
-	previous, err := os.Getwd()
-	require.NoError(t, err)
-	require.NoError(t, os.Chdir(t.TempDir()))
-	t.Cleanup(func() { require.NoError(t, os.Chdir(previous)) })
+	t.Chdir(t.TempDir())
 	for _, b := range ctx.Config.Builds {
 		if b.Dir != "" {
 			require.NoError(t, os.Mkdir(b.Dir, 0o755))
@@ -455,9 +447,9 @@ func TestSkipBuildTmpl(t *testing.T) {
 }
 
 func TestExtDarwin(t *testing.T) {
-	require.Equal(t, "", extFor("darwin_amd64", config.BuildDetails{}))
-	require.Equal(t, "", extFor("darwin_arm64", config.BuildDetails{}))
-	require.Equal(t, "", extFor("darwin_amd64", config.BuildDetails{}))
+	require.Empty(t, extFor("darwin_amd64", config.BuildDetails{}))
+	require.Empty(t, extFor("darwin_arm64", config.BuildDetails{}))
+	require.Empty(t, extFor("darwin_amd64", config.BuildDetails{}))
 	require.Equal(t, ".dylib", extFor("darwin_amd64", config.BuildDetails{Buildmode: "c-shared"}))
 	require.Equal(t, ".dylib", extFor("darwin_arm64", config.BuildDetails{Buildmode: "c-shared"}))
 	require.Equal(t, ".a", extFor("darwin_amd64", config.BuildDetails{Buildmode: "c-archive"}))
@@ -465,9 +457,9 @@ func TestExtDarwin(t *testing.T) {
 }
 
 func TestExtLinux(t *testing.T) {
-	require.Equal(t, "", extFor("linux_amd64", config.BuildDetails{}))
-	require.Equal(t, "", extFor("linux_386", config.BuildDetails{}))
-	require.Equal(t, "", extFor("linux_amd64", config.BuildDetails{}))
+	require.Empty(t, extFor("linux_amd64", config.BuildDetails{}))
+	require.Empty(t, extFor("linux_386", config.BuildDetails{}))
+	require.Empty(t, extFor("linux_amd64", config.BuildDetails{}))
 	require.Equal(t, ".so", extFor("linux_amd64", config.BuildDetails{Buildmode: "c-shared"}))
 	require.Equal(t, ".so", extFor("linux_386", config.BuildDetails{Buildmode: "c-shared"}))
 	require.Equal(t, ".a", extFor("linux_amd64", config.BuildDetails{Buildmode: "c-archive"}))
@@ -491,9 +483,9 @@ func TestExtWasm(t *testing.T) {
 }
 
 func TestExtOthers(t *testing.T) {
-	require.Equal(t, "", extFor("linux_amd64", config.BuildDetails{}))
-	require.Equal(t, "", extFor("linuxwin_386", config.BuildDetails{}))
-	require.Equal(t, "", extFor("winasdasd_sad", config.BuildDetails{}))
+	require.Empty(t, extFor("linux_amd64", config.BuildDetails{}))
+	require.Empty(t, extFor("linuxwin_386", config.BuildDetails{}))
+	require.Empty(t, extFor("winasdasd_sad", config.BuildDetails{}))
 	require.Equal(t, ".so", extFor("aix_amd64", config.BuildDetails{Buildmode: "c-shared"}))
 	require.Equal(t, ".a", extFor("android_386", config.BuildDetails{Buildmode: "c-archive"}))
 	require.Equal(t, ".so", extFor("winasdasd_sad", config.BuildDetails{Buildmode: "c-shared"}))

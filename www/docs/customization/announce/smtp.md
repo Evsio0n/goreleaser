@@ -1,4 +1,4 @@
-# SMTP
+# Email/SMTP
 
 For it to work, you'll need to set some environment variables on your pipeline:
 
@@ -10,6 +10,8 @@ Then, you can add something like the following to your `.goreleaser.yaml` config
 announce:
   smtp:
     # Whether its enabled or not.
+    #
+    # Templates: allowed (since v2.6).
     enabled: true
 
     # SMTP Host.

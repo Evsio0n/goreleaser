@@ -83,18 +83,22 @@ func TestAnnounceMissingEnv(t *testing.T) {
 
 func TestSkip(t *testing.T) {
 	t.Run("skip", func(t *testing.T) {
-		require.True(t, Pipe{}.Skip(testctx.New()))
+		skip, err := Pipe{}.Skip(testctx.New())
+		require.NoError(t, err)
+		require.True(t, skip)
 	})
 
 	t.Run("dont skip", func(t *testing.T) {
 		ctx := testctx.NewWithCfg(config.Project{
 			Announce: config.Announce{
 				Slack: config.Slack{
-					Enabled: true,
+					Enabled: "true",
 				},
 			},
 		})
-		require.False(t, Pipe{}.Skip(ctx))
+		skip, err := Pipe{}.Skip(ctx)
+		require.NoError(t, err)
+		require.False(t, skip)
 	})
 }
 
@@ -160,14 +164,14 @@ func TestUnmarshal(t *testing.T) {
 		t.Parallel()
 		ctx := testctx.New(testctx.WithVersion(testVersion))
 		var blocks slack.Blocks
-		require.NoError(t, unmarshal(ctx, []interface{}{map[string]interface{}{"type": "divider"}}, &blocks))
+		require.NoError(t, unmarshal(ctx, []any{map[string]any{"type": "divider"}}, &blocks))
 	})
 
 	t.Run("unmarshal fails on MarshalJSON", func(t *testing.T) {
 		t.Parallel()
 		ctx := testctx.New(testctx.WithVersion(testVersion))
 		var blocks slack.Blocks
-		require.Error(t, unmarshal(ctx, []interface{}{map[string]interface{}{"type": func() {}}}, &blocks))
+		require.Error(t, unmarshal(ctx, []any{map[string]any{"type": func() {}}}, &blocks))
 	})
 
 	t.Run("unmarshal happy to resolve template", func(t *testing.T) {

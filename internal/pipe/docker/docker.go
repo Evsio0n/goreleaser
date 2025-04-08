@@ -148,7 +148,7 @@ func (Pipe) Run(ctx *context.Context) error {
 		if pipe.IsSkip(err) {
 			return err
 		}
-		return fmt.Errorf("docker build failed: %w\nLearn more at https://goreleaser.com/errors/docker-build\n", err) //nolint:revive
+		return fmt.Errorf("docker build failed: %w\nLearn more at https://goreleaser.com/errors/docker-build", err)
 	}
 	return nil
 }
@@ -247,7 +247,7 @@ Previous error:
 			Goarch: docker.Goarch,
 			Goos:   docker.Goos,
 			Goarm:  docker.Goarm,
-			Extra: map[string]interface{}{
+			Extra: map[string]any{
 				dockerConfigExtra: docker,
 			},
 		})
@@ -301,11 +301,7 @@ func processBuildFlagTemplates(ctx *context.Context, docker config.Docker) ([]st
 func dockerPush(ctx *context.Context, image *artifact.Artifact) error {
 	log.WithField("image", image.Name).Info("pushing")
 
-	docker, err := artifact.Extra[config.Docker](*image, dockerConfigExtra)
-	if err != nil {
-		return err
-	}
-
+	docker := artifact.MustExtra[config.Docker](*image, dockerConfigExtra)
 	skip, err := tmpl.New(ctx).Apply(docker.SkipPush)
 	if err != nil {
 		return err
@@ -322,6 +318,9 @@ func dockerPush(ctx *context.Context, image *artifact.Artifact) error {
 		return err
 	}
 
+	log.WithField("image", image.Name).
+		WithField("digest", digest).
+		Info("pushed")
 	art := &artifact.Artifact{
 		Type:   artifact.DockerImage,
 		Name:   image.Name,
@@ -329,12 +328,14 @@ func dockerPush(ctx *context.Context, image *artifact.Artifact) error {
 		Goarch: image.Goarch,
 		Goos:   image.Goos,
 		Goarm:  image.Goarm,
-		Extra:  map[string]interface{}{},
+		Extra: map[string]any{
+			dockerConfigExtra:    docker,
+			artifact.ExtraDigest: digest,
+		},
 	}
 	if docker.ID != "" {
 		art.Extra[artifact.ExtraID] = docker.ID
 	}
-	art.Extra[artifact.ExtraDigest] = digest
 
 	ctx.Artifacts.Add(art)
 	return nil

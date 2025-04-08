@@ -9,9 +9,7 @@ publishing your releases.
 
 You also have plenty of customization options:
 
-```yaml
-# goreleaser.yaml
-
+```yaml title="goreleaser.yaml"
 dockerhub:
   - # Your hub.docker.com username. Must have 'editor' permissions
     #
@@ -43,6 +41,7 @@ dockerhub:
     # The short description of the image.
     #
     # Templates: allowed.
+    # Default: inferred from global metadata.
     description: A short description
 
     # The full description of the image.

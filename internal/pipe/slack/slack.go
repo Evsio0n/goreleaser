@@ -1,3 +1,4 @@
+// Package slack announces releases to Slack.
 package slack
 
 import (
@@ -19,8 +20,11 @@ const (
 
 type Pipe struct{}
 
-func (Pipe) String() string                 { return "slack" }
-func (Pipe) Skip(ctx *context.Context) bool { return !ctx.Config.Announce.Slack.Enabled }
+func (Pipe) String() string { return "slack" }
+func (Pipe) Skip(ctx *context.Context) (bool, error) {
+	enable, err := tmpl.New(ctx).Bool(ctx.Config.Announce.Slack.Enabled)
+	return !enable, err
+}
 
 type Config struct {
 	Webhook string `env:"SLACK_WEBHOOK,notEmpty"`
@@ -97,7 +101,7 @@ func parseAdvancedFormatting(ctx *context.Context) (*slack.Blocks, []slack.Attac
 	return blocks, attachments, nil
 }
 
-func unmarshal(ctx *context.Context, in interface{}, target interface{}) error {
+func unmarshal(ctx *context.Context, in any, target any) error {
 	jazon, err := json.Marshal(in)
 	if err != nil {
 		return fmt.Errorf("failed to marshal input as JSON: %w", err)

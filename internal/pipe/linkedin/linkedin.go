@@ -1,3 +1,4 @@
+// Package linkedin announces releases on LinkedIn.
 package linkedin
 
 import (
@@ -13,8 +14,11 @@ const defaultMessageTemplate = `{{ .ProjectName }} {{ .Tag }} is out! Check it o
 
 type Pipe struct{}
 
-func (Pipe) String() string                 { return "linkedin" }
-func (Pipe) Skip(ctx *context.Context) bool { return !ctx.Config.Announce.LinkedIn.Enabled }
+func (Pipe) String() string { return "linkedin" }
+func (Pipe) Skip(ctx *context.Context) (bool, error) {
+	enable, err := tmpl.New(ctx).Bool(ctx.Config.Announce.LinkedIn.Enabled)
+	return !enable, err
+}
 
 type Config struct {
 	AccessToken string `env:"LINKEDIN_ACCESS_TOKEN,notEmpty"`

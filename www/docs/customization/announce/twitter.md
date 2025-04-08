@@ -1,8 +1,9 @@
-# Twitter
+# 𝕏/Twitter
 
 !!! warning
-Twitter has [announced][tw] that API usage will no longer be free starting
-Feb 9, 2023.
+
+    Twitter has [announced][tw] that API usage will no longer be free starting
+    Feb 9, 2023.
 
 [tw]: https://twitter.com/TwitterDev/status/1621026986784337922
 
@@ -20,6 +21,8 @@ Then, you can add something like the following to your `.goreleaser.yaml` config
 announce:
   twitter:
     # Whether its enabled or not.
+    #
+    # Templates: allowed (since v2.6).
     enabled: true
 
     # Message template to use while publishing.

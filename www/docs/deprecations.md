@@ -39,6 +39,126 @@ Description.
 
 -->
 
+### archives.builds
+
+> since v2.8
+
+The `builds` field has been replaced with the `ids`, which is the nomenclature
+used everywhere else.
+
+=== "Before"
+
+    ```yaml
+    archives:
+      builds: [a, b]
+    ```
+
+=== "After"
+
+    ```yaml
+    archives:
+      ids: [a, b]
+    ```
+
+### snaps.builds
+
+> since v2.8
+
+The `builds` field has been replaced with the `ids`, which is the nomenclature
+used everywhere else.
+
+=== "Before"
+
+    ```yaml
+    snaps:
+      builds: [a, b]
+    ```
+
+=== "After"
+
+    ```yaml
+    snaps:
+      ids: [a, b]
+    ```
+
+### nfpms.builds
+
+> since v2.8
+
+The `builds` field has been replaced with the `ids`, which is the nomenclature
+used everywhere else.
+
+=== "Before"
+
+    ```yaml
+    nfpms:
+      builds: [a, b]
+    ```
+
+=== "After"
+
+    ```yaml
+    nfpms:
+      ids: [a, b]
+    ```
+
+### archives.format
+
+> since v2.6
+
+Format was renamed to `formats`, and now accepts a list of formats.
+
+=== "Before"
+
+    ```yaml
+    archives:
+      - format: zip
+    ```
+
+=== "After"
+
+    ```yaml
+    archives:
+      - formats: [ 'zip' ]
+    ```
+
+!!! tip
+
+    It will still accept a single string, e.g.: `formats: zip`.
+    In most cases you can simply rename the property to formats.
+
+### archives.format_overrides.format
+
+> since v2.6
+
+Format was renamed to `formats`, and now accepts a list of formats.
+
+!!! tip
+
+    It will still accept a single string, e.g.: `formats: zip`.
+    In most cases you can simply rename the property to formats.
+
+=== "Before"
+
+    ```yaml
+    archives:
+      - format_overrides:
+        - format: zip
+    ```
+
+=== "After"
+
+    ```yaml
+    archives:
+      - format_overrides:
+        - formats: [ 'zip' ]
+    ```
+
+!!! tip
+
+    It will still accept a single string, e.g.: `formats: zip`.
+    In most cases you can simply rename the property to formats.
+
 ### kos.repository
 
 > since v2.5
@@ -520,7 +640,7 @@ This option was still being supported, even though undocumented, for a couple
 of years now. It's finally time to sunset it.
 
 Simply use the pluralized form, `builds`, according to the
-[documentation](customization/builds.md).
+[documentation](./customization/builds/index.md).
 
 === "Before"
 

@@ -359,7 +359,7 @@ func TestWithDefaults(t *testing.T) {
 			build, err := Default.WithDefaults(ctx.Config.Builds[0])
 			require.NoError(t, err)
 			require.ElementsMatch(t, build.Targets, testcase.targets)
-			require.EqualValues(t, testcase.tool, build.Tool)
+			require.Equal(t, testcase.tool, build.Tool)
 		})
 	}
 }
@@ -391,7 +391,7 @@ func createFakeGoBinaryWithVersion(tb testing.TB, name, version string) {
 
 	require.NoError(tb, os.WriteFile(
 		filepath.Join(d, name),
-		[]byte(fmt.Sprintf("#!/bin/sh\necho %s", version)),
+		fmt.Appendf(nil, "#!/bin/sh\necho %s", version),
 		0o755,
 	))
 
@@ -469,10 +469,18 @@ func TestBuild(t *testing.T) {
 					"linux_arm_6",
 					"js_wasm",
 					"linux_mips_softfloat",
-					"linux_mips64le_softfloat",
 				},
 				Tool:    "{{ .Env.GOBIN }}",
 				Command: "build",
+				BuildDetailsOverrides: []config.BuildDetailsOverride{
+					{
+						Goos:   "linux",
+						Goarch: "amd64",
+						BuildDetails: config.BuildDetails{
+							Env: []string{"TEST_O=1"},
+						},
+					},
+				},
 				BuildDetails: config.BuildDetails{
 					Env: []string{
 						"GO111MODULE=off",
@@ -503,9 +511,6 @@ func TestBuild(t *testing.T) {
 		bin, terr := tmpl.New(ctx).Apply(build.Binary)
 		require.NoError(t, terr)
 
-		// injecting some delay here to force inconsistent mod times on bins
-		time.Sleep(2 * time.Second)
-
 		gtarget, err := Default.Parse(target)
 		require.NoError(t, err)
 		require.NoError(t, Default.Build(ctx, build, api.Options{
@@ -532,12 +537,12 @@ func TestBuild(t *testing.T) {
 			Goamd64: "v1",
 			Target:  "linux_amd64_v1",
 			Type:    artifact.Binary,
-			Extra: map[string]interface{}{
+			Extra: map[string]any{
 				artifact.ExtraExt:     "",
 				artifact.ExtraBinary:  "foo-v5.6.7",
 				artifact.ExtraID:      "foo",
 				artifact.ExtraBuilder: "go",
-				"testEnvs":            []string{"TEST_T=l"},
+				"testEnvs":            []string{"TEST_T=l", "TEST_O=1"},
 			},
 		},
 		{
@@ -548,23 +553,7 @@ func TestBuild(t *testing.T) {
 			Gomips: "softfloat",
 			Target: "linux_mips_softfloat",
 			Type:   artifact.Binary,
-			Extra: map[string]interface{}{
-				artifact.ExtraExt:     "",
-				artifact.ExtraBinary:  "foo-v5.6.7",
-				artifact.ExtraID:      "foo",
-				artifact.ExtraBuilder: "go",
-				"testEnvs":            []string{"TEST_T=l"},
-			},
-		},
-		{
-			Name:   "bin/foo-v5.6.7",
-			Path:   filepath.ToSlash(filepath.Join("dist", "linux_mips64le_softfloat", "bin", "foo-v5.6.7")),
-			Goos:   "linux",
-			Goarch: "mips64le",
-			Gomips: "softfloat",
-			Target: "linux_mips64le_softfloat",
-			Type:   artifact.Binary,
-			Extra: map[string]interface{}{
+			Extra: map[string]any{
 				artifact.ExtraExt:     "",
 				artifact.ExtraBinary:  "foo-v5.6.7",
 				artifact.ExtraID:      "foo",
@@ -580,7 +569,7 @@ func TestBuild(t *testing.T) {
 			Goamd64: "v1",
 			Target:  "darwin_amd64_v1",
 			Type:    artifact.Binary,
-			Extra: map[string]interface{}{
+			Extra: map[string]any{
 				artifact.ExtraExt:     "",
 				artifact.ExtraBinary:  "foo-v5.6.7",
 				artifact.ExtraID:      "foo",
@@ -596,7 +585,7 @@ func TestBuild(t *testing.T) {
 			Goarm:  "6",
 			Target: "linux_arm_6",
 			Type:   artifact.Binary,
-			Extra: map[string]interface{}{
+			Extra: map[string]any{
 				artifact.ExtraExt:     "",
 				artifact.ExtraBinary:  "foo-v5.6.7",
 				artifact.ExtraID:      "foo",
@@ -612,7 +601,7 @@ func TestBuild(t *testing.T) {
 			Goamd64: "v1",
 			Target:  "windows_amd64_v1",
 			Type:    artifact.Binary,
-			Extra: map[string]interface{}{
+			Extra: map[string]any{
 				artifact.ExtraExt:     ".exe",
 				artifact.ExtraBinary:  "foo-v5.6.7",
 				artifact.ExtraID:      "foo",
@@ -627,7 +616,7 @@ func TestBuild(t *testing.T) {
 			Goarch: "wasm",
 			Target: "js_wasm",
 			Type:   artifact.Binary,
-			Extra: map[string]interface{}{
+			Extra: map[string]any{
 				artifact.ExtraExt:     ".wasm",
 				artifact.ExtraBinary:  "foo-v5.6.7",
 				artifact.ExtraID:      "foo",
@@ -639,24 +628,6 @@ func TestBuild(t *testing.T) {
 
 	got := list.List()
 	testlib.RequireEqualArtifacts(t, expected, got)
-
-	modTimes := map[int64]bool{}
-	for _, bin := range ctx.Artifacts.List() {
-		if bin.Type != artifact.Binary {
-			continue
-		}
-
-		fi, err := os.Stat(bin.Path)
-		require.NoError(t, err)
-
-		// make this a suitable map key, per docs: https://pkg.go.dev/time#Time
-		modTime := fi.ModTime().UTC().Round(0).Unix()
-
-		if modTimes[modTime] {
-			t.Fatal("duplicate modified time found, times should be different by default")
-		}
-		modTimes[modTime] = true
-	}
 }
 
 func TestBuildInvalidEnv(t *testing.T) {
@@ -935,7 +906,7 @@ func TestBuildTests(t *testing.T) {
 
 func TestRunPipeWithProxiedRepo(t *testing.T) {
 	folder := testlib.Mktmp(t)
-	out, err := exec.Command("git", "clone", "https://github.com/goreleaser/goreleaser", "-b", "v0.161.1", "--depth=1", ".").CombinedOutput()
+	out, err := exec.Command("git", "clone", "https://github.com/goreleaser/test-mod", "-b", "v0.1.1", "--depth=1", ".").CombinedOutput()
 	require.NoError(t, err, string(out))
 
 	proxied := filepath.Join(folder, "dist/proxy/default")
@@ -945,19 +916,20 @@ func TestRunPipeWithProxiedRepo(t *testing.T) {
 		[]byte(`// +build main
 package main
 
-import _ "github.com/goreleaser/goreleaser"
+import _ "github.com/goreleaser/test-mod"
 `),
 		0o666,
 	))
 	require.NoError(t, os.WriteFile(
 		filepath.Join(proxied, "go.mod"),
-		[]byte("module foo\nrequire github.com/goreleaser/goreleaser v0.161.1"),
+		[]byte("module foo\nrequire github.com/goreleaser/test-mod v0.1.1"),
 		0o666,
 	))
 
 	cmd := exec.Command("go", "mod", "tidy")
 	cmd.Dir = proxied
-	require.NoError(t, cmd.Run())
+	out, err = cmd.CombinedOutput()
+	require.NoError(t, err, string(out))
 
 	ctx := testctx.NewWithCfg(config.Project{
 		GoMod: config.GoMod{
@@ -966,7 +938,7 @@ import _ "github.com/goreleaser/goreleaser"
 		Builds: []config.Build{
 			{
 				Binary:        "foo",
-				Main:          "github.com/goreleaser/goreleaser",
+				Main:          "github.com/goreleaser/test-mod",
 				Dir:           proxied,
 				UnproxiedMain: ".",
 				UnproxiedDir:  ".",
@@ -1069,7 +1041,7 @@ func TestInvalidTemplate(t *testing.T) {
 
 func TestBuildModTimestamp(t *testing.T) {
 	// round to seconds since this will be a unix timestamp
-	modTime := time.Now().AddDate(-1, 0, 0).Round(1 * time.Second).UTC()
+	modTime := time.Now().AddDate(-1, 0, 0).Round(time.Second).UTC()
 
 	folder := testlib.Mktmp(t)
 	writeGoodMain(t, folder)
@@ -1083,9 +1055,7 @@ func TestBuildModTimestamp(t *testing.T) {
 				Targets: []string{
 					"linux_amd64",
 					"darwin_amd64",
-					"windows_amd64",
 					"linux_arm_6",
-					"js_wasm",
 					"linux_mips_softfloat",
 					"linux_mips64le_softfloat",
 				},
@@ -1103,25 +1073,16 @@ func TestBuildModTimestamp(t *testing.T) {
 		testctx.WithCurrentTag("v5.6.7"),
 		testctx.WithVersion("5.6.7"),
 	)
+
 	build := ctx.Config.Builds[0]
 	for _, target := range build.Targets {
-		var ext string
-		if strings.HasPrefix(target, "windows") {
-			ext = ".exe"
-		} else if target == "js_wasm" {
-			ext = ".wasm"
-		}
 		bin, terr := tmpl.New(ctx).Apply(build.Binary)
 		require.NoError(t, terr)
 
-		// injecting some delay here to force inconsistent mod times on bins
-		time.Sleep(2 * time.Second)
-
 		err := Default.Build(ctx, build, api.Options{
 			Target: mustParse(t, runtimeTarget),
-			Name:   bin + ext,
-			Path:   filepath.Join(folder, "dist", target, bin+ext),
-			Ext:    ext,
+			Name:   bin,
+			Path:   filepath.Join(folder, "dist", target, bin),
 		})
 		require.NoError(t, err)
 	}

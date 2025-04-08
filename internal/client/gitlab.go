@@ -10,12 +10,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/caarlos0/log"
 	"github.com/goreleaser/goreleaser/v2/internal/artifact"
 	"github.com/goreleaser/goreleaser/v2/internal/tmpl"
 	"github.com/goreleaser/goreleaser/v2/pkg/config"
 	"github.com/goreleaser/goreleaser/v2/pkg/context"
-	"github.com/xanzy/go-gitlab"
+	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
 
 const DefaultGitLabDownloadURL = "https://gitlab.com"
@@ -28,10 +29,12 @@ var (
 type gitlabClient struct {
 	client   *gitlab.Client
 	authType gitlab.AuthType
+
+	isV17OrLater bool
 }
 
 // newGitLab returns a gitlab client implementation.
-func newGitLab(ctx *context.Context, token string) (*gitlabClient, error) {
+func newGitLab(ctx *context.Context, token string, opts ...gitlab.ClientOptionFunc) (*gitlabClient, error) {
 	transport := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		TLSClientConfig: &tls.Config{
@@ -39,11 +42,11 @@ func newGitLab(ctx *context.Context, token string) (*gitlabClient, error) {
 			InsecureSkipVerify: ctx.Config.GitLabURLs.SkipTLSVerify,
 		},
 	}
-	options := []gitlab.ClientOptionFunc{
+	options := append([]gitlab.ClientOptionFunc{
 		gitlab.WithHTTPClient(&http.Client{
 			Transport: transport,
 		}),
-	}
+	}, opts...)
 	if ctx.Config.GitLabURLs.API != "" {
 		apiURL, err := tmpl.New(ctx).Apply(ctx.Config.GitLabURLs.API)
 		if err != nil {
@@ -66,10 +69,26 @@ func newGitLab(ctx *context.Context, token string) (*gitlabClient, error) {
 	if err != nil {
 		return &gitlabClient{}, err
 	}
+
 	return &gitlabClient{
-		client:   client,
-		authType: authType,
+		client:       client,
+		authType:     authType,
+		isV17OrLater: isV17(client),
 	}, nil
+}
+
+func isV17(client *gitlab.Client) bool {
+	v, _, err := client.Version.GetVersion(nil)
+	if err != nil {
+		log.WithError(err).Warn("could not get gitlab version")
+		return false
+	}
+	vv, err := semver.NewVersion(v.Version)
+	if err != nil {
+		log.WithError(err).Warn("could not parse gitlab version")
+		return false
+	}
+	return vv.GreaterThanEqual(semver.New(17, 0, 0, "", ""))
 }
 
 func (c *gitlabClient) checkIsPrivateToken() error {
@@ -533,14 +552,21 @@ func (c *gitlabClient) Upload(
 
 	name := artifact.Name
 	filename := "/" + name
+	opt := &gitlab.CreateReleaseLinkOptions{
+		Name: &name,
+		URL:  &linkURL,
+	}
+	if c.isV17OrLater {
+		opt.DirectAssetPath = &filename
+	} else {
+		opt.FilePath = &filename
+	}
+
 	releaseLink, resp, err := c.client.ReleaseLinks.CreateReleaseLink(
 		projectID,
 		releaseID,
-		&gitlab.CreateReleaseLinkOptions{
-			Name:     &name,
-			URL:      &linkURL,
-			FilePath: &filename,
-		})
+		opt,
+	)
 	if err != nil {
 		// this status means the asset already exists
 		if resp != nil && resp.StatusCode == http.StatusBadRequest && releaseLink != nil {
@@ -567,7 +593,7 @@ func (c *gitlabClient) Upload(
 
 	// for checksums.txt the field is nil, so we initialize it
 	if artifact.Extra == nil {
-		artifact.Extra = make(map[string]interface{})
+		artifact.Extra = make(map[string]any)
 	}
 
 	return nil

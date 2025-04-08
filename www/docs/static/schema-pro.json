@@ -104,6 +104,19 @@
 					},
 					"directory": {
 						"type": "string"
+					},
+					"disable": {
+						"oneOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "boolean"
+							}
+						]
+					},
+					"install": {
+						"type": "string"
 					}
 				},
 				"additionalProperties": false,
@@ -228,6 +241,19 @@
 					},
 					"directory": {
 						"type": "string"
+					},
+					"disable": {
+						"oneOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "boolean"
+							}
+						]
+					},
+					"install": {
+						"type": "string"
 					}
 				},
 				"additionalProperties": false,
@@ -322,6 +348,18 @@
 					},
 					"bundle": {
 						"type": "string"
+					},
+					"extra_files": {
+						"items": {
+							"$ref": "#/$defs/File"
+						},
+						"type": "array"
+					},
+					"templated_extra_files": {
+						"items": {
+							"$ref": "#/$defs/TemplatedFile"
+						},
+						"type": "array"
 					}
 				},
 				"additionalProperties": false,
@@ -336,7 +374,7 @@
 					"id": {
 						"type": "string"
 					},
-					"builds": {
+					"ids": {
 						"items": {
 							"type": "string"
 						},
@@ -348,19 +386,8 @@
 					"name_template": {
 						"type": "string"
 					},
-					"format": {
-						"type": "string",
-						"enum": [
-							"tar",
-							"tgz",
-							"tar.gz",
-							"zip",
-							"gz",
-							"tar.xz",
-							"txz",
-							"binary"
-						],
-						"default": "tar.gz"
+					"formats": {
+						"$ref": "#/$defs/StringArray"
 					},
 					"format_overrides": {
 						"items": {
@@ -399,6 +426,26 @@
 					"templated_files": {
 						"items": {
 							"$ref": "#/$defs/TemplatedFile"
+						},
+						"type": "array"
+					},
+					"format": {
+						"type": "string",
+						"enum": [
+							"tar",
+							"tgz",
+							"tar.gz",
+							"zip",
+							"gz",
+							"tar.xz",
+							"txz",
+							"binary"
+						],
+						"default": "tar.gz"
+					},
+					"builds": {
+						"items": {
+							"type": "string"
 						},
 						"type": "array"
 					}
@@ -553,7 +600,14 @@
 			"Bluesky": {
 				"properties": {
 					"enabled": {
-						"type": "boolean"
+						"oneOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "boolean"
+							}
+						]
 					},
 					"username": {
 						"type": "string"
@@ -655,6 +709,8 @@
 							"go",
 							"rust",
 							"zig",
+							"bun",
+							"deno",
 							"prebuilt"
 						]
 					},
@@ -878,6 +934,30 @@
 							"type": "string"
 						},
 						"type": "array"
+					},
+					"ai": {
+						"$ref": "#/$defs/ChangelogAI"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object"
+			},
+			"ChangelogAI": {
+				"properties": {
+					"use": {
+						"type": "string",
+						"enum": [
+							"anthropic",
+							"openai",
+							"ollama"
+						],
+						"default": ""
+					},
+					"prompt": {
+						"$ref": "#/$defs/IncludedMarkdown"
+					},
+					"model": {
+						"type": "string"
 					}
 				},
 				"additionalProperties": false,
@@ -902,7 +982,10 @@
 					}
 				},
 				"additionalProperties": false,
-				"type": "object"
+				"type": "object",
+				"required": [
+					"title"
+				]
 			},
 			"ChangelogSubgroup": {
 				"properties": {
@@ -1087,9 +1170,12 @@
 					},
 					"distributions": {
 						"additionalProperties": {
-							"type": "string"
+							"$ref": "#/$defs/StringArray"
 						},
 						"type": "object"
+					},
+					"component": {
+						"type": "string"
 					}
 				},
 				"additionalProperties": false,
@@ -1111,68 +1197,6 @@
 				},
 				"additionalProperties": false,
 				"type": "object"
-			},
-			"Content": {
-				"properties": {
-					"src": {
-						"type": "string"
-					},
-					"dst": {
-						"type": "string"
-					},
-					"type": {
-						"type": "string",
-						"enum": [
-							"symlink",
-							"ghost",
-							"config",
-							"config|noreplace",
-							"dir",
-							"tree",
-							""
-						],
-						"default": ""
-					},
-					"packager": {
-						"type": "string"
-					},
-					"file_info": {
-						"$ref": "#/$defs/ContentFileInfo"
-					},
-					"expand": {
-						"type": "boolean"
-					}
-				},
-				"additionalProperties": false,
-				"type": "object",
-				"required": [
-					"dst"
-				]
-			},
-			"ContentFileInfo": {
-				"properties": {
-					"owner": {
-						"type": "string"
-					},
-					"group": {
-						"type": "string"
-					},
-					"mode": {
-						"type": "integer"
-					},
-					"mtime": {
-						"type": "string",
-						"format": "date-time"
-					}
-				},
-				"additionalProperties": false,
-				"type": "object"
-			},
-			"Contents": {
-				"items": {
-					"$ref": "#/$defs/Content"
-				},
-				"type": "array"
 			},
 			"DMG": {
 				"properties": {
@@ -1209,7 +1233,7 @@
 					"use": {
 						"type": "string",
 						"enum": [
-							"enum=binary",
+							"binary",
 							"appbundle"
 						]
 					},
@@ -1229,7 +1253,14 @@
 			"Discord": {
 				"properties": {
 					"enabled": {
-						"type": "boolean"
+						"oneOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "boolean"
+							}
+						]
 					},
 					"message_template": {
 						"type": "string"
@@ -1559,6 +1590,9 @@
 				"properties": {
 					"goos": {
 						"type": "string"
+					},
+					"formats": {
+						"$ref": "#/$defs/StringArray"
 					},
 					"format": {
 						"type": "string",
@@ -1902,6 +1936,9 @@
 										"cmd": {
 											"type": "string"
 										},
+										"if": {
+											"type": "string"
+										},
 										"env": {
 											"items": {
 												"type": "string"
@@ -2144,6 +2181,16 @@
 					},
 					"base_import_paths": {
 						"type": "boolean"
+					},
+					"disable": {
+						"oneOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "boolean"
+							}
+						]
 					}
 				},
 				"additionalProperties": false,
@@ -2229,7 +2276,14 @@
 			"LinkedIn": {
 				"properties": {
 					"enabled": {
-						"type": "boolean"
+						"oneOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "boolean"
+							}
+						]
 					},
 					"message_template": {
 						"type": "string"
@@ -2269,6 +2323,19 @@
 					},
 					"mod_timestamp": {
 						"type": "string"
+					},
+					"extensions": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array"
+					},
+					"version": {
+						"type": "string",
+						"enum": [
+							"v3",
+							"v4"
+						]
 					}
 				},
 				"additionalProperties": false,
@@ -2290,7 +2357,7 @@
 						"type": "string"
 					},
 					"timeout": {
-						"type": "integer"
+						"type": "string"
 					},
 					"wait": {
 						"type": "boolean"
@@ -2304,12 +2371,30 @@
 					"key_id"
 				]
 			},
+			"MacOSNotarizeNative": {
+				"properties": {
+					"profile_name": {
+						"type": "string"
+					},
+					"wait": {
+						"type": "boolean"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": [
+					"profile_name"
+				]
+			},
 			"MacOSSign": {
 				"properties": {
 					"certificate": {
 						"type": "string"
 					},
 					"password": {
+						"type": "string"
+					},
+					"entitlements": {
 						"type": "string"
 					}
 				},
@@ -2318,6 +2403,30 @@
 				"required": [
 					"certificate",
 					"password"
+				]
+			},
+			"MacOSSignNative": {
+				"properties": {
+					"identity": {
+						"type": "string"
+					},
+					"keychain": {
+						"type": "string"
+					},
+					"options": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array"
+					},
+					"entitlements": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": [
+					"identity"
 				]
 			},
 			"MacOSSignNotarize": {
@@ -2348,6 +2457,37 @@
 				"additionalProperties": false,
 				"type": "object",
 				"required": [
+					"sign"
+				]
+			},
+			"MacOSSignNotarizeNative": {
+				"properties": {
+					"ids": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array"
+					},
+					"enabled": {
+						"oneOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "boolean"
+							}
+						]
+					},
+					"sign": {
+						"$ref": "#/$defs/MacOSSignNative"
+					},
+					"notarize": {
+						"$ref": "#/$defs/MacOSNotarizeNative"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": [
 					"sign",
 					"notarize"
 				]
@@ -2355,7 +2495,14 @@
 			"Mastodon": {
 				"properties": {
 					"enabled": {
-						"type": "boolean"
+						"oneOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "boolean"
+							}
+						]
 					},
 					"message_template": {
 						"type": "string"
@@ -2382,7 +2529,14 @@
 			"Mattermost": {
 				"properties": {
 					"enabled": {
-						"type": "boolean"
+						"oneOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "boolean"
+							}
+						]
 					},
 					"message_template": {
 						"type": "string"
@@ -2506,7 +2660,10 @@
 						"type": "array"
 					},
 					"contents": {
-						"$ref": "#/$defs/Contents"
+						"items": {
+							"$ref": "#/$defs/NFPMContent"
+						},
+						"type": "array"
 					},
 					"scripts": {
 						"$ref": "#/$defs/NFPMScripts"
@@ -2527,7 +2684,10 @@
 						"$ref": "#/$defs/NFPMIPK"
 					},
 					"templated_contents": {
-						"$ref": "#/$defs/Contents"
+						"items": {
+							"$ref": "#/$defs/NFPMContent"
+						},
+						"type": "array"
 					},
 					"templated_scripts": {
 						"$ref": "#/$defs/NFPMScripts"
@@ -2541,14 +2701,11 @@
 					"id": {
 						"type": "string"
 					},
-					"builds": {
+					"ids": {
 						"items": {
 							"type": "string"
 						},
 						"type": "array"
-					},
-					"if": {
-						"type": "string"
 					},
 					"formats": {
 						"items": {
@@ -2594,8 +2751,20 @@
 					"changelog": {
 						"type": "string"
 					},
+					"mtime": {
+						"type": "string"
+					},
 					"meta": {
 						"type": "boolean"
+					},
+					"if": {
+						"type": "string"
+					},
+					"builds": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array"
 					}
 				},
 				"additionalProperties": false,
@@ -2664,6 +2833,43 @@
 				"additionalProperties": false,
 				"type": "object"
 			},
+			"NFPMContent": {
+				"properties": {
+					"src": {
+						"type": "string"
+					},
+					"dst": {
+						"type": "string"
+					},
+					"type": {
+						"type": "string",
+						"enum": [
+							"symlink",
+							"ghost",
+							"config",
+							"config|noreplace",
+							"dir",
+							"tree",
+							""
+						],
+						"default": ""
+					},
+					"packager": {
+						"type": "string"
+					},
+					"file_info": {
+						"$ref": "#/$defs/FileInfo"
+					},
+					"expand": {
+						"type": "boolean"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": [
+					"dst"
+				]
+			},
 			"NFPMDeb": {
 				"properties": {
 					"scripts": {
@@ -2718,6 +2924,9 @@
 						"type": "string"
 					},
 					"templates": {
+						"type": "string"
+					},
+					"config": {
 						"type": "string"
 					}
 				},
@@ -2899,7 +3108,10 @@
 						"type": "array"
 					},
 					"contents": {
-						"$ref": "#/$defs/Contents"
+						"items": {
+							"$ref": "#/$defs/NFPMContent"
+						},
+						"type": "array"
 					},
 					"scripts": {
 						"$ref": "#/$defs/NFPMScripts"
@@ -2920,7 +3132,10 @@
 						"$ref": "#/$defs/NFPMIPK"
 					},
 					"templated_contents": {
-						"$ref": "#/$defs/Contents"
+						"items": {
+							"$ref": "#/$defs/NFPMContent"
+						},
+						"type": "array"
 					},
 					"templated_scripts": {
 						"$ref": "#/$defs/NFPMScripts"
@@ -2993,6 +3208,91 @@
 					},
 					"postremove": {
 						"type": "string"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object"
+			},
+			"NPM": {
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"ids": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array"
+					},
+					"name": {
+						"type": "string"
+					},
+					"description": {
+						"type": "string"
+					},
+					"homepage": {
+						"type": "string"
+					},
+					"keywords": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array"
+					},
+					"license": {
+						"type": "string"
+					},
+					"author": {
+						"type": "string"
+					},
+					"repository": {
+						"type": "string"
+					},
+					"bugs": {
+						"type": "string"
+					},
+					"files": {
+						"items": {
+							"$ref": "#/$defs/ExtraFile"
+						},
+						"type": "array"
+					},
+					"templated_files": {
+						"items": {
+							"$ref": "#/$defs/TemplatedExtraFile"
+						},
+						"type": "array"
+					},
+					"access": {
+						"type": "string",
+						"enum": [
+							"",
+							"public",
+							"restricted"
+						]
+					},
+					"format": {
+						"type": "string",
+						"enum": [
+							"tar",
+							"tgz",
+							"tar.gz",
+							"zip",
+							"binary"
+						]
+					},
+					"if": {
+						"type": "string"
+					},
+					"disable": {
+						"oneOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "boolean"
+							}
+						]
 					}
 				},
 				"additionalProperties": false,
@@ -3121,18 +3421,28 @@
 							"$ref": "#/$defs/MacOSSignNotarize"
 						},
 						"type": "array"
+					},
+					"macos_native": {
+						"items": {
+							"$ref": "#/$defs/MacOSSignNotarizeNative"
+						},
+						"type": "array"
 					}
 				},
 				"additionalProperties": false,
-				"type": "object",
-				"required": [
-					"macos"
-				]
+				"type": "object"
 			},
 			"OpenCollective": {
 				"properties": {
 					"enabled": {
-						"type": "boolean"
+						"oneOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "boolean"
+							}
+						]
 					},
 					"slug": {
 						"type": "string"
@@ -3179,6 +3489,9 @@
 						],
 						"default": 2
 					},
+					"pro": {
+						"type": "boolean"
+					},
 					"project_name": {
 						"type": "string"
 					},
@@ -3200,6 +3513,12 @@
 					"brews": {
 						"items": {
 							"$ref": "#/$defs/Homebrew"
+						},
+						"type": "array"
+					},
+					"npms": {
+						"items": {
+							"$ref": "#/$defs/NPM"
 						},
 						"type": "array"
 					},
@@ -3611,7 +3930,14 @@
 			"Reddit": {
 				"properties": {
 					"enabled": {
-						"type": "boolean"
+						"oneOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "boolean"
+							}
+						]
 					},
 					"application_id": {
 						"type": "string"
@@ -3837,7 +4163,14 @@
 			"SMTP": {
 				"properties": {
 					"enabled": {
-						"type": "boolean"
+						"oneOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "boolean"
+							}
+						]
 					},
 					"host": {
 						"type": "string"
@@ -4030,7 +4363,14 @@
 			"Slack": {
 				"properties": {
 					"enabled": {
-						"type": "boolean"
+						"oneOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "boolean"
+							}
+						]
 					},
 					"message_template": {
 						"type": "string"
@@ -4094,7 +4434,7 @@
 					"id": {
 						"type": "string"
 					},
-					"builds": {
+					"ids": {
 						"items": {
 							"type": "string"
 						},
@@ -4187,6 +4527,12 @@
 					"templated_extra_files": {
 						"items": {
 							"$ref": "#/$defs/SnapcraftExtraFiles"
+						},
+						"type": "array"
+					},
+					"builds": {
+						"items": {
+							"type": "string"
 						},
 						"type": "array"
 					}
@@ -4422,7 +4768,14 @@
 			"Teams": {
 				"properties": {
 					"enabled": {
-						"type": "boolean"
+						"oneOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "boolean"
+							}
+						]
 					},
 					"title_template": {
 						"type": "string"
@@ -4443,7 +4796,14 @@
 			"Telegram": {
 				"properties": {
 					"enabled": {
-						"type": "boolean"
+						"oneOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "boolean"
+							}
+						]
 					},
 					"message_template": {
 						"type": "string"
@@ -4537,7 +4897,14 @@
 			"Twitter": {
 				"properties": {
 					"enabled": {
-						"type": "boolean"
+						"oneOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "boolean"
+							}
+						]
 					},
 					"message_template": {
 						"type": "string"
@@ -4713,6 +5080,16 @@
 					"extra_files_only": {
 						"type": "boolean"
 					},
+					"skip": {
+						"oneOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "boolean"
+							}
+						]
+					},
 					"matrix": {
 						"$ref": "#/$defs/Matrix"
 					},
@@ -4729,7 +5106,14 @@
 			"Webhook": {
 				"properties": {
 					"enabled": {
-						"type": "boolean"
+						"oneOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "boolean"
+							}
+						]
 					},
 					"skip_tls_verify": {
 						"type": "boolean"
@@ -4868,8 +5252,7 @@
 				"type": "object",
 				"required": [
 					"publisher",
-					"repository",
-					"short_description"
+					"repository"
 				]
 			},
 			"WingetDependency": {
